@@ -9,6 +9,7 @@ import 'screens/nudge_listening_screen.dart';
 import 'screens/song_selection_screen.dart';
 import 'screens/playlist_save_screen.dart';
 import 'screens/confirmation_screen.dart';
+import 'screens/callback_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,8 +26,8 @@ class MusicNudgeApp extends StatelessWidget {
       title: 'Song Sakhi – Music Nudge',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      initialRoute: '/login',
       routes: {
+        '/': (ctx) => const LoginScreen(),
         '/login': (ctx) => const LoginScreen(),
         '/connect': (ctx) => const ConnectHubsScreen(),
         '/permissions': (ctx) => const PermissionsScreen(),
@@ -39,6 +40,7 @@ class MusicNudgeApp extends StatelessWidget {
         },
         '/playlist': (ctx) => const PlaylistSaveScreen(),
         '/confirmation': (ctx) => const ConfirmationScreen(),
+        '/callback': (ctx) => const CallbackScreen(),
       },
     );
   }

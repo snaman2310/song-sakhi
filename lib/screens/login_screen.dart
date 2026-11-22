@@ -1,3 +1,4 @@
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -6,15 +7,10 @@ import '../auth_service.dart';
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
-  void _continue(BuildContext ctx) {
-    // Auth keys are added later; for now move through the onboarding flow.
-    ScaffoldMessenger.of(ctx).showSnackBar(
-      SnackBar(
-        content: const Text('Google OAuth – connect your keys to enable sign-in'),
-        backgroundColor: AppColors.surfaceHighest,
-      ),
-    );
-    Navigator.pushNamed(ctx, '/connect');
+  // Start the Google/YouTube Music OAuth flow (PKCE, no client secret).
+  Future<void> _continue(BuildContext ctx) async {
+    final url = await AuthService().buildAuthUrl('google');
+    html.window.location.href = url;
   }
 
   @override

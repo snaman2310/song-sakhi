@@ -1,6 +1,8 @@
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import '../auth_service.dart';
 
 class ConnectHubsScreen extends StatefulWidget {
   const ConnectHubsScreen({super.key});
@@ -12,6 +14,11 @@ class _ConnectHubsScreenState extends State<ConnectHubsScreen> {
   bool _spotifyOn = true;
   bool _ytConnected = false;
   bool _autoAdd = true;
+
+  Future<void> _startOAuth(String kind) async {
+    final url = await AuthService().buildAuthUrl(kind);
+    html.window.location.href = url;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -194,7 +201,7 @@ class _ConnectHubsScreenState extends State<ConnectHubsScreen> {
                 ),
               ),
               GestureDetector(
-                onTap: () => setState(() => _spotifyOn = !_spotifyOn),
+                onTap: () => _startOAuth('spotify'),
                 child: Container(
                   width: 28,
                   height: 28,
@@ -285,7 +292,7 @@ class _ConnectHubsScreenState extends State<ConnectHubsScreen> {
                 ),
               ),
               OutlinedButton.icon(
-                onPressed: () => setState(() => _ytConnected = true),
+                onPressed: () => _startOAuth('google'),
                 icon: Icon(_ytConnected ? Icons.check : Icons.add_link, size: 16),
                 label: Text(_ytConnected ? 'Connected' : 'Connect'),
                 style: OutlinedButton.styleFrom(
