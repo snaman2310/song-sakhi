@@ -28,6 +28,9 @@ Transcript: "$transcript"
     final jsonBody = json.decode(response.body);
     final text = jsonBody['candidates'][0]['content']['parts'][0]['text'];
     final List<dynamic> list = json.decode(text);
-    return list.map((e) => {'title': e['title'], 'artist': e['artist']}).toList();
+    return list.map((e) => <String, String>{
+          'title': e['title'].toString(),
+          'artist': e['artist'].toString(),
+        }).toList();
   }
 }

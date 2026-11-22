@@ -26,13 +26,16 @@ class AuthService {
   String getYouTubeAuthUrl() =>
       'https://accounts.google.com/o/oauth2/v2/auth?'
       'client_id=$_ytClientId'
-      '&redirect_uri=_ytRedirectUri'
+      '&redirect_uri=$_ytRedirectUri'
       '&response_type=code'
       '&scope=https://www.googleapis.com/auth/youtube.force-ssl'
       '&access_type=offline';
 
   Future<Map<String, String>> exchangeCode(String code, {required String kind}) async {
     // For now return dummy tokens so the app doesn’t crash.
-    return {'accessToken': 'dummy_$kind_token', 'refreshToken': 'dummy_$kind_refresh'};
+    return {
+      'accessToken': 'dummy_${kind}_token',
+      'refreshToken': 'dummy_${kind}_refresh',
+    };
   }
 }

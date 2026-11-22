@@ -7,14 +7,14 @@ class LoginScreen extends StatelessWidget {
   void _signInWithSpotify(BuildContext ctx) async {
     final service = AuthService();
     ScaffoldMessenger.of(ctx).showSnackBar(
-      const SnackBar(content: Text('Spotify OAuth – placeholder (replace later)'));
+      SnackBar(content: Text('Spotify OAuth – placeholder (replace later)')),
     );
     // Navigator.pushReplacementNamed(ctx, '/home');
   }
 
   void _signInWithYouTube(BuildContext ctx) async {
     ScaffoldMessenger.of(ctx).showSnackBar(
-      const SnackBar(content: Text('YouTube Music OAuth – placeholder'));
+      SnackBar(content: Text('YouTube Music OAuth – placeholder')),
     );
   }
 
@@ -25,17 +25,17 @@ class LoginScreen extends StatelessWidget {
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Text('Connect your music service:'),
-            SizedBox(height: 24),
+          children: [
+            const Text('Connect your music service:'),
+            const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: _signInWithSpotify,
-              icon: const Icon(Icons.spotify),
+              onPressed: () => _signInWithSpotify(context),
+              icon: const Icon(Icons.music_note),
               label: const Text('Spotify'),
             ),
             const SizedBox(height: 12),
             ElevatedButton.icon(
-              onPressed: _signInWithYouTube,
+              onPressed: () => _signInWithYouTube(context),
               icon: const Icon(Icons.music_note),
               label: const Text('YouTube Music'),
             ),

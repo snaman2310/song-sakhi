@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:music_nudge_app/screens/playlist_selector_screen.dart';
 
 class SuggestionsScreen extends StatelessWidget {
   final List<Map<String, String>> suggestions;

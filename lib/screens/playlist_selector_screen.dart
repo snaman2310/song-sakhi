@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:music_nudge_app/playlist_service.dart';
 
 class PlaylistSelectorScreen extends StatefulWidget {
   const PlaylistSelectorScreen({super.key});
@@ -21,7 +20,8 @@ class _PlaylistSelectorScreenState extends State<PlaylistSelectorScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Songs added! (placeholder)'));
+            const SnackBar(content: Text('Songs added! (placeholder)')),
+          );
         },
         child: const Icon(Icons.arrow_right),
       ),

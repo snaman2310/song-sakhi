@@ -3,7 +3,6 @@ import 'auth_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/listening_screen.dart';
-import 'screens/suggestions_screen.dart';
 import 'screens/playlist_selector_screen.dart';
 import 'screens/confirmation_screen.dart';
 
@@ -41,7 +40,6 @@ class MusicNudgeApp extends StatelessWidget {
         '/login': (ctx) => const LoginScreen(),
         '/home': (ctx) => const HomeScreen(),
         '/listening': (ctx) => const ListeningScreen(),
-        '/suggestions': (ctx) => const SuggestionsScreen(),
         '/playlist': (ctx) => const PlaylistSelectorScreen(),
         '/confirmation': (ctx) =>
             const ConfirmationScreen(

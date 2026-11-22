@@ -31,11 +31,12 @@ class _ListeningScreenState extends State<ListeningScreen> {
     final transcript = await _whisper.transcribeRecentClip();
     setState(() => _transcript = transcript);
     final suggestions = await _gemini.suggestSongs(transcript);
-    if (suggestions.isNotEmpty) {
-      Navigator.pushNamed(
+    if (suggestions.isNotEmpty && mounted) {
+      Navigator.push(
         context,
-        '/suggestions',
-        arguments: suggestions,
+        MaterialPageRoute(
+          builder: (_) => SuggestionsScreen(suggestions: suggestions),
+        ),
       );
     }
   }
@@ -48,19 +49,18 @@ class _ListeningScreenState extends State<ListeningScreen> {
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Text('Listening to reel audio…',
+                children: [
+                  const Text('Listening to reel audio…',
                       style: TextStyle(fontSize: 18)),
-                  SizedBox(height: 20),
-                  CircularProgressIndicator(),
-                  SizedBox(height: 20),
+                  const SizedBox(height: 20),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 20),
                   Text('Transcript: $_transcript',
                       style: const TextStyle(fontSize: 16)),
                 ],
               ),
             )
           : const Center(child: Text('Microphone permission denied')),
-      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _startListen,
         tooltip: 'Listen',
