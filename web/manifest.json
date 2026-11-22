@@ -1,0 +1,12 @@
+{
+  "name": "Music Nudge",
+  "short_name": "MusicNudge",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#131313",
+  "theme_color": "#53E076",
+  "description": "Nudge, listen, and add songs to your playlist",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false,
+  "icons": []
+}
