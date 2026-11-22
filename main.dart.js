@@ -72271,7 +72271,7 @@ A.KT.prototype={
 oZ(a){return this.a4x(a)},
 a4x(a){var s=0,r=A.L(t.H),q,p
 var $async$oZ=A.M(function(b,c){if(b===1)return A.I(c,r)
-for(;;)switch(s){case 0:q=A.ec("https://song-sakhi-auth.onrender.com"+(a==="spotify"?"/auth/spotify":"/auth/google"),t.N)
+for(;;)switch(s){case 0:q=A.ec("https://song-sakhi-auth1.onrender.com"+(a==="spotify"?"/auth/spotify":"/auth/google"),t.N)
 s=2
 return A.G(q,$async$oZ)
 case 2:p=c
@@ -72326,7 +72326,7 @@ $.aa.ok$.push(new A.acv(this))},
 ro(a){return this.XT(a)},
 XT(a){var s=0,r=A.L(t.H),q,p
 var $async$ro=A.M(function(b,c){if(b===1)return A.I(c,r)
-for(;;)switch(s){case 0:q=A.ec("https://song-sakhi-auth.onrender.com/auth/google",t.N)
+for(;;)switch(s){case 0:q=A.ec("https://song-sakhi-auth1.onrender.com/auth/google",t.N)
 s=2
 return A.G(q,$async$ro)
 case 2:p=c
