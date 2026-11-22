@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: song-sakhi-auth
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: BACKEND_URL
+        value: https://song-sakhi-auth.onrender.com
+      - key: FRONTEND_URL
+        value: https://song-sakhi.onrender.com
+      - key: GOOGLE_CLIENT_ID
+        value: 331023929615-ffl7jhc7s3oqspdl5nseifdql59b8u0h.apps.googleusercontent.com
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: SPOTIFY_CLIENT_ID
+        value: 3a108eb4fbb846bcafe8c52c359098f6
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
