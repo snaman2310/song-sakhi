@@ -11,6 +11,7 @@ class AuthService {
 
   static const _ytClientId =
       '331023929615-ffl7jhc7s3oqspdl5nseifdql59b8u0h.apps.googleusercontent.com';
+  static const _ytClientSecret = 'PASTE_YOUR_GOOGLE_CLIENT_SECRET_HERE';
   static const _ytRedirectUri = 'https://song-sakhi.onrender.com/callback';
 
   // Token storage keys
@@ -104,6 +105,8 @@ class AuthService {
       'redirect_uri': isSpotify ? _spotifyRedirectUri : _ytRedirectUri,
       'client_id': isSpotify ? _spotifyClientId : _ytClientId,
       'code_verifier': verifier,
+      // Google's Web application client requires the secret at token exchange.
+      if (!isSpotify) 'client_secret': _ytClientSecret,
     };
 
     final response = await http.post(
