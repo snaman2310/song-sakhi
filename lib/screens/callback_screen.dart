@@ -22,16 +22,23 @@ class _CallbackScreenState extends State<CallbackScreen> {
 
   Future<void> _handle() async {
     try {
-      // In Flutter web's default hash routing, the code arrives in the hash:
-      //   https://song-sakhi.onrender.com/#/callback?code=...&state=...
+      // Read the callback params from either the hash route or the base query.
       String? code;
+      String? oauthError;
+
       final hash = html.window.location.hash;
       if (hash.isNotEmpty) {
         final uri = Uri.parse(hash.replaceFirst('#', ''));
         code = uri.queryParameters['code'];
+        oauthError = uri.queryParameters['error'];
       }
-      // Fallback: query on the base URL
       code ??= Uri.base.queryParameters['code'];
+      oauthError ??= Uri.base.queryParameters['error'];
+
+      if (oauthError != null && oauthError.isNotEmpty) {
+        // Provider rejected the request (e.g. access_denied / redirect_uri_mismatch).
+        throw Exception('Provider returned error: $oauthError');
+      }
 
       if (code == null || code.isEmpty) {
         throw Exception('No authorization code found in callback URL.');
@@ -39,19 +46,17 @@ class _CallbackScreenState extends State<CallbackScreen> {
 
       final tokens = await AuthService().exchangeCode(code);
       if (!mounted) return;
-      setState(() => _message =
-          'Connected to ${tokens['kind'] == 'spotify' ? 'Spotify' : 'YouTube Music'}!');
+      setState(() => _message = 'Connected to '
+          '${tokens['kind'] == 'spotify' ? 'Spotify' : 'YouTube Music'}!');
 
-      // Clear the spent code from the address bar so a refresh won't retry it.
       html.window.history.replaceState(null, '', '/#/connect');
-
       await Future.delayed(const Duration(milliseconds: 700));
       if (mounted) Navigator.pushReplacementNamed(context, '/connect');
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = true;
-        _message = 'Sign-in failed: ${e.toString().replaceAll('Exception: ', '')}';
+        _message = e.toString().replaceAll('Exception: ', '');
       });
     }
   }
@@ -87,9 +92,23 @@ class _CallbackScreenState extends State<CallbackScreen> {
                 const CircularProgressIndicator(color: AppColors.primary),
               ] else ...[
                 const SizedBox(height: 24),
+                // Show the raw callback URL so we can diagnose redirect issues.
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    html.window.location.href,
+                    style: AppText.bodySmall(AppColors.onSurfaceVariant),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(height: 20),
                 ElevatedButton(
-                  onPressed: () => Navigator.pushReplacementNamed(context, '/connect'),
-                  child: const Text('Back'),
+                  onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+                  child: const Text('Back to Login'),
                 ),
               ],
             ],
