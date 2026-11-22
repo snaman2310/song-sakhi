@@ -29,16 +29,15 @@ jobs:
         run: |
           rm -rf android
           flutter create --platforms=android --org com.song.sakhi --project-name song_sakhi .
-          test -f android/app/build.gradle
 
       - name: Install custom AndroidManifest (deep link + mic permission)
         run: cp deploy/android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
 
       - name: Bump compileSdk to 37 (required by permission_handler_android)
         run: |
-          sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*flutter\.compileSdkVersion/compileSdk = 37/' android/app/build.gradle
-          sed -i -E 's/compileSdk[[:space:]]*flutter\.compileSdkVersion/compileSdk 37/' android/app/build.gradle
-          grep -n "compileSdk" android/app/build.gradle
+          sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*flutter\.compileSdkVersion/compileSdk = 37/' android/app/build.gradle.kts
+          sed -i -E 's/compileSdk[[:space:]]*flutter\.compileSdkVersion/compileSdk 37/' android/app/build.gradle.kts
+          grep -n "compileSdk" android/app/build.gradle.kts
 
       - name: Get packages
         run: flutter pub get
