@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:music_nudge_app/whisper_service.dart';
 import 'package:music_nudge_app/gemini_service.dart';
 import 'package:music_nudge_app/screens/suggestions_screen.dart';
