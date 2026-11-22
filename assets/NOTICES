@@ -25136,6 +25136,7 @@ BSD-style license that can be found in the LICENSE file.
 permission_handler
 permission_handler_android
 permission_handler_apple
+permission_handler_html
 permission_handler_platform_interface
 permission_handler_windows
 
