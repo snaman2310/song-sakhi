@@ -60,16 +60,23 @@ function clearPkceCookies(res) {
 }
 
 // Redirect back to the Flutter app with tokens in the URL fragment.
-function redirectToApp(res, provider, accessToken, refreshToken) {
+function redirectToApp(req, res, provider, accessToken, refreshToken) {
   const params = new URLSearchParams({
     provider,
     access_token: accessToken || '',
     refresh_token: refreshToken || '',
   });
+  // Mobile app uses a custom-scheme deep link; web app uses the hash route.
+  if (req.cookies.oauth_platform === 'mobile') {
+    return res.redirect(303, `songsakhi://auth?${params.toString()}`);
+  }
   res.redirect(303, `${FRONTEND_URL}/#/auth-done?${params.toString()}`);
 }
 
-function redirectWithError(res, message) {
+function redirectWithError(req, res, message) {
+  if (req.cookies.oauth_platform === 'mobile') {
+    return res.redirect(303, `songsakhi://auth-error?message=${encodeURIComponent(message)}`);
+  }
   res.redirect(303, `${FRONTEND_URL}/#/auth-error?message=${encodeURIComponent(message)}`);
 }
 
@@ -83,6 +90,9 @@ app.get('/auth/google', (req, res) => {
   const verifier = makeVerifier();
   const state = crypto.randomBytes(16).toString('hex');
   setPkceCookies(res, verifier, state, 'google');
+  if (req.query.platform === 'mobile') {
+    res.cookie('oauth_platform', 'mobile', { httpOnly: true, secure: true, sameSite: 'lax', maxAge: 10 * 60 * 1000, path: '/' });
+  }
 
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
@@ -127,11 +137,11 @@ app.get('/auth/google/callback', async (req, res) => {
       throw new Error(`Token exchange failed (${tokenRes.status}): ${data.error_description || data.error || JSON.stringify(data)}`);
     }
     clearPkceCookies(res);
-    redirectToApp(res, 'google', data.access_token, data.refresh_token);
+    redirectToApp(req, res, 'google', data.access_token, data.refresh_token);
   } catch (err) {
     clearPkceCookies(res);
     console.error('[google]', err.message);
-    redirectWithError(res, err.message);
+    redirectWithError(req, res, err.message);
   }
 });
 
@@ -140,6 +150,9 @@ app.get('/auth/spotify', (req, res) => {
   const verifier = makeVerifier();
   const state = crypto.randomBytes(16).toString('hex');
   setPkceCookies(res, verifier, state, 'spotify');
+  if (req.query.platform === 'mobile') {
+    res.cookie('oauth_platform', 'mobile', { httpOnly: true, secure: true, sameSite: 'lax', maxAge: 10 * 60 * 1000, path: '/' });
+  }
 
   const params = new URLSearchParams({
     client_id: SPOTIFY_CLIENT_ID,
@@ -181,11 +194,11 @@ app.get('/auth/spotify/callback', async (req, res) => {
       throw new Error(`Token exchange failed (${tokenRes.status}): ${data.error_description || data.error || JSON.stringify(data)}`);
     }
     clearPkceCookies(res);
-    redirectToApp(res, 'spotify', data.access_token, data.refresh_token);
+    redirectToApp(req, res, 'spotify', data.access_token, data.refresh_token);
   } catch (err) {
     clearPkceCookies(res);
     console.error('[spotify]', err.message);
-    redirectWithError(res, err.message);
+    redirectWithError(req, res, err.message);
   }
 });
 

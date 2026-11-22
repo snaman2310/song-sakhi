@@ -13,6 +13,11 @@ dependencies:
   shared_preferences: ^2.0.2
   permission_handler: ^10.4.3
   google_fonts: ^6.0.0
+  # Mobile-only packages
+  record: ^5.2.1
+  path_provider: ^2.1.2
+  url_launcher: ^6.2.2
+  app_links: ^6.4.1
 
 dev_dependencies:
   flutter_test:
