@@ -9,7 +9,7 @@ services:
       - key: PORT
         value: "10000"
       - key: BACKEND_URL
-        value: https://song-sakhi-auth.onrender.com
+        value: https://song-sakhi-auth1.onrender.com
       - key: FRONTEND_URL
         value: https://song-sakhi.onrender.com
       - key: GOOGLE_CLIENT_ID

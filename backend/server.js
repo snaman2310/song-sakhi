@@ -23,7 +23,7 @@ const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || '';
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || '';
 
 // Public URLs
-const BACKEND_URL = process.env.BACKEND_URL || `https://song-sakhi-auth.onrender.com`;
+const BACKEND_URL = process.env.BACKEND_URL || `https://song-sakhi-auth1.onrender.com`;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://song-sakhi.onrender.com';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';

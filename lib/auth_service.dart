@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 ///   3. stores them locally.
 class AuthService {
   // Public backend that performs the OAuth code -> token exchange.
-  static const _backendUrl = 'https://song-sakhi-auth.onrender.com';
+  static const _backendUrl = 'https://song-sakhi-auth1.onrender.com';
 
   // Token storage keys
   static const _kSpotifyToken = 'spotify_access_token';
