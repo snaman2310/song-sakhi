@@ -3,7 +3,7 @@ import 'dart:convert';
 
 class GeminiService {
   // TODO: Put your Gemini Flash API key here (obtain from AI Studio).
-  static const _apiKey = 'YOUR_GEMINI_API_KEY';
+  static const _apiKey = 'AQ.Ab8RN6Lc3C8Gq9HZ4aai02zKrmzNaF0IXWyKOhHW9sFBKh3GqA';
 
   Future<List<Map<String, String>>> suggestSongs(String transcript) async {
     final url = Uri.parse(
