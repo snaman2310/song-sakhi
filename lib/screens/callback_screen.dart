@@ -3,6 +3,11 @@ import 'package:flutter/material.dart';
 import '../auth_service.dart';
 import '../theme.dart';
 
+/// Handles the redirect back from the OAuth backend.
+///
+/// Backend redirects to either:
+///   #/auth-done?provider=google&access_token=...&refresh_token=...
+///   #/auth-error?message=...
 class CallbackScreen extends StatefulWidget {
   const CallbackScreen({super.key});
 
@@ -22,38 +27,37 @@ class _CallbackScreenState extends State<CallbackScreen> {
 
   Future<void> _handle() async {
     try {
-      // Read the callback params from either the hash route or the base query.
-      String? code;
-      String? oauthError;
+      final hash = html.window.location.hash; // e.g. #/auth-done?provider=...
+      final uri = Uri.parse(hash.replaceFirst('#', ''));
+      final path = uri.path;
 
-      final hash = html.window.location.hash;
-      if (hash.isNotEmpty) {
-        final uri = Uri.parse(hash.replaceFirst('#', ''));
-        code = uri.queryParameters['code'];
-        oauthError = uri.queryParameters['error'];
-      }
-      code ??= Uri.base.queryParameters['code'];
-      oauthError ??= Uri.base.queryParameters['error'];
-
-      // Clear the code from the address bar immediately to prevent the login
-      // screen fallback from re-triggering if the user hits "Back".
+      // Clear the fragment immediately so a refresh can't replay the tokens.
       html.window.history.replaceState(null, '', '/#/connect');
 
-      if (oauthError != null && oauthError.isNotEmpty) {
-        // Provider rejected the request (e.g. access_denied / redirect_uri_mismatch).
-        throw Exception('Provider returned error: $oauthError');
+      if (path == '/auth-error') {
+        final msg = uri.queryParameters['message'] ?? 'Unknown error';
+        throw Exception(msg);
       }
 
-      if (code == null || code.isEmpty) {
-        throw Exception('No authorization code found in callback URL.');
+      final provider = uri.queryParameters['provider'] ?? '';
+      final access = uri.queryParameters['access_token'] ?? '';
+      final refresh = uri.queryParameters['refresh_token'] ?? '';
+
+      if (access.isEmpty) {
+        throw Exception('No access token received from auth server.');
       }
 
-      final tokens = await AuthService().exchangeCode(code);
+      final result = await AuthService().storeTokensFromCallback(
+        provider: provider,
+        accessToken: access,
+        refreshToken: refresh,
+      );
+
       if (!mounted) return;
       setState(() => _message = 'Connected to '
-          '${tokens['kind'] == 'spotify' ? 'Spotify' : 'YouTube Music'}!');
+          '${result['kind'] == 'spotify' ? 'Spotify' : 'YouTube Music'}!');
 
-      await Future.delayed(const Duration(milliseconds: 700));
+      await Future.delayed(const Duration(milliseconds: 600));
       if (mounted) Navigator.pushReplacementNamed(context, '/connect');
     } catch (e) {
       if (!mounted) return;
@@ -95,20 +99,6 @@ class _CallbackScreenState extends State<CallbackScreen> {
                 const CircularProgressIndicator(color: AppColors.primary),
               ] else ...[
                 const SizedBox(height: 24),
-                // Show the raw callback URL so we can diagnose redirect issues.
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    html.window.location.href,
-                    style: AppText.bodySmall(AppColors.onSurfaceVariant),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
                   child: const Text('Back to Login'),

@@ -18,9 +18,10 @@ class _LoginScreenState extends State<LoginScreen> {
     // ?code=... in the URL, forward to the callback handler.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final hash = html.window.location.hash;
-      final hasCode = hash.contains('code=') ||
-          (Uri.base.queryParameters.containsKey('code'));
-      if (hasCode && mounted) {
+      final hasToken = hash.contains('access_token=') ||
+          hash.contains('/auth-error') ||
+          (Uri.base.queryParameters.containsKey('access_token'));
+      if (hasToken && mounted) {
         Navigator.pushReplacementNamed(context, '/callback');
       }
     });

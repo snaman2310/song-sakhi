@@ -30,7 +30,7 @@ class MusicNudgeApp extends StatelessWidget {
       // when the fragment contains a query string (e.g. #/callback?code=...).
       onGenerateInitialRoutes: (initialRoute) {
         final path = _cleanPath(initialRoute);
-        if (path == '/callback') {
+        if (path == '/auth-done' || path == '/auth-error' || path == '/callback') {
           return [MaterialPageRoute(builder: (_) => const CallbackScreen())];
         }
         return [MaterialPageRoute(builder: (_) => const LoginScreen())];
@@ -56,6 +56,8 @@ class MusicNudgeApp extends StatelessWidget {
           case '/confirmation':
             return MaterialPageRoute(builder: (_) => const ConfirmationScreen());
           case '/callback':
+          case '/auth-done':
+          case '/auth-error':
             return MaterialPageRoute(builder: (_) => const CallbackScreen());
           default:
             return MaterialPageRoute(builder: (_) => const LoginScreen());
