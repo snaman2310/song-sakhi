@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,7 +19,6 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          # version: '3.22.0'  # optionally pin a version
 
       - name: Get packages
         run: flutter pub get
@@ -24,8 +26,15 @@ jobs:
       - name: Build Web
         run: flutter build web --release
 
-      - name: Upload web bundle
-        uses: actions/upload-artifact@v4
+      - name: Verify build output
+        run: |
+          echo "--- build/web contents ---"
+          ls -la build/web
+          test -f build/web/index.html && echo "index.html OK"
+
+      - name: Deploy to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          name: flutter-web-bundle
-          path: build/web/
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build/web
+          publish_branch: gh-pages
