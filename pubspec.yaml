@@ -14,7 +14,7 @@ dependencies:
   permission_handler: ^13.0.2
   google_fonts: ^6.0.0
   # Mobile-only packages
-  record: ^5.2.1
+  record: ^7.2.0
   path_provider: ^2.1.2
   url_launcher: ^6.2.2
   app_links: ^6.4.1

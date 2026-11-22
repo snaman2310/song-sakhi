@@ -21,7 +21,7 @@ void main() async {
   await AuthService().initialise();
 
   final appLinks = AppLinks();
-  final initial = await appLinks.getInitialAppLink();
+  final initial = await appLinks.getInitialLink();
   if (initial != null) _linkController.add(initial);
   appLinks.uriLinkStream.listen((uri) => _linkController.add(uri));
 
