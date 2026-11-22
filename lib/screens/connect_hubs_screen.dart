@@ -11,12 +11,30 @@ class ConnectHubsScreen extends StatefulWidget {
 }
 
 class _ConnectHubsScreenState extends State<ConnectHubsScreen> {
-  bool _spotifyOn = true;
+  // Real connection state, loaded from stored tokens (not mockup values).
+  bool _spotifyOn = false;
   bool _ytConnected = false;
   bool _autoAdd = true;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadState();
+  }
+
+  Future<void> _loadState() async {
+    final auth = AuthService();
+    final spotifyToken = await auth.tokenFor('spotify');
+    final ytToken = await auth.tokenFor('google');
+    if (!mounted) return;
+    setState(() {
+      _spotifyOn = spotifyToken != null && spotifyToken.isNotEmpty;
+      _ytConnected = ytToken != null && ytToken.isNotEmpty;
+    });
+  }
+
   Future<void> _startOAuth(String kind) async {
-    final url = await AuthService().buildAuthUrl(kind);
+    final url = AuthService().buildAuthUrl(kind);
     html.window.location.href = url;
   }
 
@@ -192,10 +210,12 @@ class _ConnectHubsScreenState extends State<ConnectHubsScreen> {
                     ]),
                     const SizedBox(height: 4),
                     Row(children: [
-                      const Icon(Icons.check_circle, size: 14, color: AppColors.primary),
+                      Icon(Icons.circle, size: 10,
+                          color: _spotifyOn ? AppColors.primary : AppColors.outline),
                       const SizedBox(width: 4),
-                      Text('Connected as alex_beats',
-                          style: AppText.bodySmall(AppColors.primary)),
+                      Text(_spotifyOn ? 'Connected' : 'Tap to connect Spotify',
+                          style: AppText.bodySmall(
+                              _spotifyOn ? AppColors.primary : AppColors.onSurfaceVariant)),
                     ]),
                   ],
                 ),
