@@ -2,13 +2,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
   // TODO: Replace these strings with your real keys / secrets once you have them.
-  static const _spotifyClientId     = 'YOUR_SPOTIFY_CLIENT_ID';
+  static const _spotifyClientId     = '3a108eb4fbb846bcafe8c52c359098f6';
   static const _spotifyClientSecret = 'YOUR_SPOTIFY_CLIENT_SECRET';
-  static const _spotifyRedirectUri  = 'YOUR_SPOTIFY_REDIRECT_URI';
+  static const _spotifyRedirectUri  = 'https://song-sakhi.onrender.com/callback';
 
-  static const _ytClientId     = 'YOUR_YT_CLIENT_ID';
+  static const _ytClientId     = '331023929615-ffl7jhc7s3oqspdl5nseifdql59b8u0h.apps.googleusercontent.com';
   static const _ytClientSecret = 'YOUR_YT_CLIENT_SECRET';
-  static const _ytRedirectUri  = 'YOUR_YT_REDIRECT_URI';
+  static const _ytRedirectUri  = 'https://song-sakhi.onrender.com/callback';
 
   Future<void> initialise() async {
     final prefs = await SharedPreferences.getInstance();
