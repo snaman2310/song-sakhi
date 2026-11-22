@@ -33,4 +33,16 @@
         </activity>
         <meta-data android:name="flutterEmbedding" android:value="2"/>
     </application>
+
+    <!-- Required on Android 11+ so url_launcher can open https OAuth URLs -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="http"/>
+        </intent>
+    </queries>
 </manifest>

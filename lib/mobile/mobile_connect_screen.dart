@@ -14,6 +14,12 @@ class _MobileConnectScreenState extends State<MobileConnectScreen> {
   bool _spotifyOn = false;
   bool _ytConnected = false;
   bool _autoAdd = true;
+  String? _error;
+
+  Future<void> _connect(String kind) async {
+    final err = await startMobileOAuth(kind);
+    if (err != null && mounted) setState(() => _error = err);
+  }
 
   @override
   void initState() {
@@ -113,14 +119,28 @@ class _MobileConnectScreenState extends State<MobileConnectScreen> {
                   const SizedBox(height: 8),
                   Text('Choose the services where your playlists live.',
                       style: AppText.bodyMedium(AppColors.onSurfaceVariant)),
-                  const SizedBox(height: 24),
+                  if (_error != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.secondaryContainer.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.secondaryContainer.withValues(alpha: 0.4)),
+                      ),
+                      child: Text(_error!,
+                          style: AppText.bodySmall(AppColors.onSurface),
+                          textAlign: TextAlign.center),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  const SizedBox(height: 8),
                   _card(
                     icon: Icons.album,
                     color: AppColors.primaryContainer,
                     title: 'Spotify',
                     subtitle: _spotifyOn ? 'Connected' : 'Tap to connect',
                     connected: _spotifyOn,
-                    onTap: () => startMobileOAuth('spotify'),
+                    onTap: () => _connect('spotify'),
                   ),
                   const SizedBox(height: 14),
                   _card(
@@ -129,7 +149,7 @@ class _MobileConnectScreenState extends State<MobileConnectScreen> {
                     title: 'YouTube Music',
                     subtitle: _ytConnected ? 'Connected' : 'Tap to connect',
                     connected: _ytConnected,
-                    onTap: () => startMobileOAuth('google'),
+                    onTap: () => _connect('google'),
                   ),
                   const SizedBox(height: 18),
                   Container(

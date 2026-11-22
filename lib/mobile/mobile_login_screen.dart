@@ -3,8 +3,21 @@ import '../theme.dart';
 import '../widgets.dart';
 import 'mobile_auth_launcher.dart';
 
-class MobileLoginScreen extends StatelessWidget {
+class MobileLoginScreen extends StatefulWidget {
   const MobileLoginScreen({super.key});
+  @override
+  State<MobileLoginScreen> createState() => _MobileLoginScreenState();
+}
+
+class _MobileLoginScreenState extends State<MobileLoginScreen> {
+  String? _error;
+
+  Future<void> _signIn() async {
+    final err = await startMobileOAuth('google');
+    if (err != null && mounted) {
+      setState(() => _error = err);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,11 +85,25 @@ class MobileLoginScreen extends StatelessWidget {
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton.icon(
-                      onPressed: () => startMobileOAuth('google'),
+                      onPressed: _signIn,
                       icon: const Icon(Icons.g_mobiledata, size: 24),
                       label: const Text('Continue with Google'),
                     ),
                   ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.secondaryContainer.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.secondaryContainer.withValues(alpha: 0.4)),
+                      ),
+                      child: Text(_error!,
+                          style: AppText.bodySmall(AppColors.onSurface),
+                          textAlign: TextAlign.center),
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
