@@ -1,0 +1,26 @@
+name: music_nudge_app
+description: "Nudge‑→‑listen‑→‑Whisper‑→‑Gemini‑→‑Playlist demo"
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^0.13.6
+  shared_preferences: ^2.0.2
+  permission_handler: ^10.4.3
+  just_audio: ^0.9.33
+  google_generative_ai: ^0.5.0
+  flutter_whisper: ^0.3.0
+  flutter_svg: ^2.0.7
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
