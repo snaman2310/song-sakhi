@@ -184,7 +184,7 @@ class PermissionsScreen extends StatelessWidget {
                           height: 20,
                           decoration: const BoxDecoration(
                               shape: BoxShape.circle, color: AppColors.primaryContainer),
-                          child: const Icon(Icons.music_cast, size: 12, color: AppColors.onPrimary),
+                          child: const Icon(Icons.music_note, size: 12, color: AppColors.onPrimary),
                         ),
                         const SizedBox(width: 6),
                         Text('Nudge ready',

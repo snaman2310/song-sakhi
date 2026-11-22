@@ -94,7 +94,7 @@ class LoginScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   const _FeatureCard(
-                    icon: Icons.sync_saved_locally,
+                    icon: Icons.sync,
                     color: AppColors.primaryContainer,
                     title: 'Direct Sync to Spotify & YT Music',
                     subtitle: 'Auto-populates your selected playlist library',
@@ -292,7 +292,7 @@ class _GPainter extends CustomPainter {
     arc(const Color(0xFFFBBC05), 2.3, 1.3);
     arc(const Color(0xFF34A853), 1.0, 1.4);
     arc(const Color(0xFF4285F4), 5.2, 1.5);
-    canvas.drawCircle(c + const Offset(r * 0.35, 0), r * 0.42,
+    canvas.drawCircle(c + Offset(r * 0.35, 0), r * 0.42,
         Paint()..color = AppColors.surfaceHighest);
     canvas.drawRect(
       Rect.fromLTWH(c.dx, c.dy - 2, r * 0.9, 4),

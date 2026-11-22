@@ -237,7 +237,7 @@ class _NudgeListeningScreenState extends State<NudgeListeningScreen> {
                                         fontWeight: FontWeight.w600)),
                               ),
                             ),
-                          ],
+                          ]),
                           const SizedBox(height: 10),
                           const Text(
                             'Late night vinyl pull in Shibuya — hypnotic synth waves '
