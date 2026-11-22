@@ -4,8 +4,27 @@ import '../theme.dart';
 import '../widgets.dart';
 import '../auth_service.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Fallback: if the OAuth redirect landed us on the login route with a
+    // ?code=... in the URL, forward to the callback handler.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final hash = html.window.location.hash;
+      final hasCode = hash.contains('code=') ||
+          (Uri.base.queryParameters.containsKey('code'));
+      if (hasCode && mounted) {
+        Navigator.pushReplacementNamed(context, '/callback');
+      }
+    });
+  }
 
   // Start the Google/YouTube Music OAuth flow (PKCE, no client secret).
   Future<void> _continue(BuildContext ctx) async {

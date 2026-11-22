@@ -26,22 +26,52 @@ class MusicNudgeApp extends StatelessWidget {
       title: 'Song Sakhi – Music Nudge',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      routes: {
-        '/': (ctx) => const LoginScreen(),
-        '/login': (ctx) => const LoginScreen(),
-        '/connect': (ctx) => const ConnectHubsScreen(),
-        '/permissions': (ctx) => const PermissionsScreen(),
-        '/home': (ctx) => const SavedSongsScreen(),
-        '/nudge': (ctx) => const NudgeListeningScreen(),
-        '/suggestions': (ctx) {
-          final args = ModalRoute.of(ctx)?.settings.arguments;
-          final songs = args is List<Map<String, String>> ? args : null;
-          return SongSelectionScreen(suggestions: songs);
-        },
-        '/playlist': (ctx) => const PlaylistSaveScreen(),
-        '/confirmation': (ctx) => const ConfirmationScreen(),
-        '/callback': (ctx) => const CallbackScreen(),
+      // Use a route resolver so OAuth callbacks in the hash are handled even
+      // when the fragment contains a query string (e.g. #/callback?code=...).
+      onGenerateInitialRoutes: (initialRoute) {
+        final path = _cleanPath(initialRoute);
+        if (path == '/callback') {
+          return [MaterialPageRoute(builder: (_) => const CallbackScreen())];
+        }
+        return [MaterialPageRoute(builder: (_) => const LoginScreen())];
+      },
+      onGenerateRoute: (settings) {
+        final path = _cleanPath(settings.name ?? '/');
+        switch (path) {
+          case '/':
+          case '/login':
+            return MaterialPageRoute(builder: (_) => const LoginScreen());
+          case '/connect':
+            return MaterialPageRoute(builder: (_) => const ConnectHubsScreen());
+          case '/permissions':
+            return MaterialPageRoute(builder: (_) => const PermissionsScreen());
+          case '/home':
+            return MaterialPageRoute(builder: (_) => const SavedSongsScreen());
+          case '/nudge':
+            return MaterialPageRoute(builder: (_) => const NudgeListeningScreen());
+          case '/suggestions':
+            return MaterialPageRoute(builder: (_) => const SongSelectionScreen());
+          case '/playlist':
+            return MaterialPageRoute(builder: (_) => const PlaylistSaveScreen());
+          case '/confirmation':
+            return MaterialPageRoute(builder: (_) => const ConfirmationScreen());
+          case '/callback':
+            return MaterialPageRoute(builder: (_) => const CallbackScreen());
+          default:
+            return MaterialPageRoute(builder: (_) => const LoginScreen());
+        }
       },
     );
+  }
+
+  /// Strips the leading `#` and any query string from a route/hash value.
+  String _cleanPath(String raw) {
+    var p = raw;
+    if (p.startsWith('#')) p = p.substring(1);
+    final q = p.indexOf('?');
+    if (q != -1) p = p.substring(0, q);
+    if (p.isEmpty) return '/';
+    if (!p.startsWith('/')) p = '/$p';
+    return p;
   }
 }

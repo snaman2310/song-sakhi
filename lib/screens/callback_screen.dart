@@ -35,6 +35,10 @@ class _CallbackScreenState extends State<CallbackScreen> {
       code ??= Uri.base.queryParameters['code'];
       oauthError ??= Uri.base.queryParameters['error'];
 
+      // Clear the code from the address bar immediately to prevent the login
+      // screen fallback from re-triggering if the user hits "Back".
+      html.window.history.replaceState(null, '', '/#/connect');
+
       if (oauthError != null && oauthError.isNotEmpty) {
         // Provider rejected the request (e.g. access_denied / redirect_uri_mismatch).
         throw Exception('Provider returned error: $oauthError');
@@ -49,7 +53,6 @@ class _CallbackScreenState extends State<CallbackScreen> {
       setState(() => _message = 'Connected to '
           '${tokens['kind'] == 'spotify' ? 'Spotify' : 'YouTube Music'}!');
 
-      html.window.history.replaceState(null, '', '/#/connect');
       await Future.delayed(const Duration(milliseconds: 700));
       if (mounted) Navigator.pushReplacementNamed(context, '/connect');
     } catch (e) {
