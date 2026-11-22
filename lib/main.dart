@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'auth_service.dart';
+import 'theme.dart';
 import 'screens/login_screen.dart';
-import 'screens/home_screen.dart';
-import 'screens/listening_screen.dart';
-import 'screens/playlist_selector_screen.dart';
+import 'screens/connect_hubs_screen.dart';
+import 'screens/permissions_screen.dart';
+import 'screens/saved_songs_screen.dart';
+import 'screens/nudge_listening_screen.dart';
+import 'screens/song_selection_screen.dart';
+import 'screens/playlist_save_screen.dart';
 import 'screens/confirmation_screen.dart';
 
 void main() async {
@@ -18,34 +22,23 @@ class MusicNudgeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Music Nudge',
-      theme: ThemeData.dark().copyWith(
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFF131313),
-        primaryColor: const Color(0xFF53E076),
-        primaryColorLight: const Color(0xFF72FE8F),
-        colorScheme: ColorScheme.dark(
-          background: const Color(0xFF131313),
-          onBackground: const Color(0xFFE5E2E1),
-          surface: const Color(0xFF131313),
-          onSurface: const Color(0xFFE5E2E1),
-          primary: const Color(0xFF53E076),
-          primaryContainer: const Color(0xFF1DB954),
-          secondary: const Color(0xFFFDB3AF),
-          error: const Color(0xFFFFB4AB),
-        ),
-      ),
+      title: 'Song Sakhi – Music Nudge',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.dark,
       initialRoute: '/login',
       routes: {
         '/login': (ctx) => const LoginScreen(),
-        '/home': (ctx) => const HomeScreen(),
-        '/listening': (ctx) => const ListeningScreen(),
-        '/playlist': (ctx) => const PlaylistSelectorScreen(),
-        '/confirmation': (ctx) =>
-            const ConfirmationScreen(
-              addedCount: 0,
-              playlistName: '',
-            ),
+        '/connect': (ctx) => const ConnectHubsScreen(),
+        '/permissions': (ctx) => const PermissionsScreen(),
+        '/home': (ctx) => const SavedSongsScreen(),
+        '/nudge': (ctx) => const NudgeListeningScreen(),
+        '/suggestions': (ctx) {
+          final args = ModalRoute.of(ctx)?.settings.arguments;
+          final songs = args is List<Map<String, String>> ? args : null;
+          return SongSelectionScreen(suggestions: songs);
+        },
+        '/playlist': (ctx) => const PlaylistSaveScreen(),
+        '/confirmation': (ctx) => const ConfirmationScreen(),
       },
     );
   }
