@@ -27,8 +27,16 @@ class _ConfirmationScreenState extends State<ConfirmationScreen> {
     _count = (args is Map ? args['count'] : null) ?? widget.addedCount;
     _playlist =
         (args is Map ? args['playlist'] : null)?.toString() ?? widget.playlistName;
-    if (args is Map && args['songs'] is List<Map<String, String>>) {
-      _store.addSongs(args['songs'] as List<Map<String, String>>);
+    if (args is Map && args['songs'] is List) {
+      final raw = args['songs'] as List;
+      final songs = raw
+          .where((e) => e is Map)
+          .map((e) => <String, String>{
+                'title': (e['title'] ?? '').toString(),
+                'artist': (e['artist'] ?? '').toString(),
+              })
+          .toList();
+      _store.addSongs(songs);
     }
     if (_playlist.isNotEmpty) _store.setLastPlaylist(_playlist);
   }

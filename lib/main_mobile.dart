@@ -82,7 +82,9 @@ class _MobileAppState extends State<MobileApp> {
         },
         '/playlist': (ctx) {
           final args = ModalRoute.of(ctx)?.settings.arguments;
-          final songs = args is List<Map<String, String>> ? args : const [];
+          final songs = args is List<Map<String, String>>
+              ? args
+              : <Map<String, String>>[];
           return PlaylistSaveScreen(songs: songs);
         },
         '/confirmation': (ctx) => const ConfirmationScreen(),
