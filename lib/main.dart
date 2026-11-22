@@ -52,7 +52,12 @@ class MusicNudgeApp extends StatelessWidget {
           case '/suggestions':
             return MaterialPageRoute(builder: (_) => const SongSelectionScreen());
           case '/playlist':
-            return MaterialPageRoute(builder: (_) => const PlaylistSaveScreen());
+            final songs = settings.arguments;
+            return MaterialPageRoute(
+              builder: (_) => PlaylistSaveScreen(
+                songs: songs is List<Map<String, String>> ? songs : const [],
+              ),
+            );
           case '/confirmation':
             return MaterialPageRoute(builder: (_) => const ConfirmationScreen());
           case '/callback':

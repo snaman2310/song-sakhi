@@ -7,9 +7,8 @@ import 'mobile/mobile_login_screen.dart';
 import 'mobile/mobile_connect_screen.dart';
 import 'mobile/mobile_callback_screen.dart';
 import 'mobile/mobile_capture_screen.dart';
-import 'screens/permissions_screen.dart';
+import 'mobile/mobile_permissions_screen.dart';
 import 'screens/saved_songs_screen.dart';
-import 'screens/nudge_listening_screen.dart';
 import 'screens/song_selection_screen.dart';
 import 'screens/playlist_save_screen.dart';
 import 'screens/confirmation_screen.dart';
@@ -71,16 +70,21 @@ class _MobileAppState extends State<MobileApp> {
           final args = ModalRoute.of(ctx)?.settings.arguments;
           return MobileCallbackScreen(uriString: args is String ? args : null);
         },
-        '/permissions': (ctx) => const PermissionsScreen(),
+        '/permissions': (ctx) => const MobilePermissionsScreen(),
         '/home': (ctx) => const SavedSongsScreen(),
-        '/nudge': (ctx) => const NudgeListeningScreen(),
+        // "Capture Reel" FAB / Discover tab -> real audio capture flow.
+        '/nudge': (ctx) => const MobileCaptureScreen(),
         '/capture': (ctx) => const MobileCaptureScreen(),
         '/suggestions': (ctx) {
           final args = ModalRoute.of(ctx)?.settings.arguments;
           final songs = args is List<Map<String, String>> ? args : null;
           return SongSelectionScreen(suggestions: songs);
         },
-        '/playlist': (ctx) => const PlaylistSaveScreen(),
+        '/playlist': (ctx) {
+          final args = ModalRoute.of(ctx)?.settings.arguments;
+          final songs = args is List<Map<String, String>> ? args : const [];
+          return PlaylistSaveScreen(songs: songs);
+        },
         '/confirmation': (ctx) => const ConfirmationScreen(),
       },
     );
