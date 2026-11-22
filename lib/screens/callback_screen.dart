@@ -42,6 +42,9 @@ class _CallbackScreenState extends State<CallbackScreen> {
       setState(() => _message =
           'Connected to ${tokens['kind'] == 'spotify' ? 'Spotify' : 'YouTube Music'}!');
 
+      // Clear the spent code from the address bar so a refresh won't retry it.
+      html.window.history.replaceState(null, '', '/#/connect');
+
       await Future.delayed(const Duration(milliseconds: 700));
       if (mounted) Navigator.pushReplacementNamed(context, '/connect');
     } catch (e) {
