@@ -31,6 +31,12 @@ jobs:
       - name: Install custom AndroidManifest (deep link + mic permission)
         run: cp deploy/android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
 
+      - name: Bump compileSdk to 37 (required by permission_handler_android)
+        run: |
+          sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*flutter\.compileSdkVersion/compileSdk = 37/' android/app/build.gradle
+          sed -i -E 's/compileSdk[[:space:]]*flutter\.compileSdkVersion/compileSdk 37/' android/app/build.gradle
+          grep -n "compileSdk" android/app/build.gradle
+
       - name: Get packages
         run: flutter pub get
 
