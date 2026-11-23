@@ -121,6 +121,7 @@ class GeminiService {
                     ],
                   },
                 ],
+                'generationConfig': {'temperature': 0.0},
               }),
             )
             .timeout(const Duration(seconds: 45));
@@ -151,9 +152,26 @@ class GeminiService {
     Map<String, dynamic> backendPayload, {
     required List<Map<String, dynamic>> directParts,
   }) async {
-    Object? backendFailure;
+    GeminiException? localError;
 
-    // 1) Backend proxy (key stays on the server).
+    // 1) A key saved in Settings is fastest and works even if the backend has
+    //    not been updated/deployed yet.
+    final key = await localKey();
+    if (key != null) {
+      try {
+        final text = await _generateDirect(key, directParts);
+        return _toSongs(_parseJsonArray(text));
+      } on GeminiException catch (e) {
+        localError = e;
+      } catch (_) {
+        localError = const GeminiException(
+          'Could not reach Google to identify the song.',
+          code: 'GEMINI_UNREACHABLE',
+        );
+      }
+    }
+
+    // 2) Backend proxy (the key lives in Render, never in the app).
     try {
       final res = await http
           .post(
@@ -161,40 +179,34 @@ class GeminiService {
             headers: {'Content-Type': 'application/json'},
             body: json.encode(backendPayload),
           )
-          .timeout(const Duration(seconds: 100));
+          .timeout(const Duration(seconds: 90));
 
       if (res.statusCode == 200) {
         final body = json.decode(res.body) as Map<String, dynamic>;
         return _toSongs((body['songs'] as List?) ?? const []);
       }
-      backendFailure = GeminiException(
-        _googleMessage(res.body),
-        code: _errorCode(res.body),
-        needsKey: _errorCode(res.body) == 'GEMINI_KEY_MISSING',
-      );
-    } catch (e) {
-      backendFailure = GeminiException(
-        'Could not reach the song service. Check your internet connection.',
-        code: 'BACKEND_UNREACHABLE',
-      );
-    }
 
-    // 2) Direct call with a key the user saved in Settings.
-    final key = await localKey();
-    if (key != null) {
-      try {
-        final text = await _generateDirect(key, directParts);
-        return _toSongs(_parseJsonArray(text));
-      } on GeminiException catch (e) {
-        // Prefer the direct error when it is about the user's own key.
-        if (e.code == 'GEMINI_KEY_INVALID' || e.code == 'GEMINI_QUOTA') throw e;
-        backendFailure = e;
+      final isJson = res.body.trimLeft().startsWith('{');
+      final code = isJson ? _errorCode(res.body) : 'BACKEND_UNAVAILABLE';
+      final message = isJson
+          ? _googleMessage(res.body)
+          : 'The song service is not updated yet.';
+      throw GeminiException(
+        message,
+        code: code,
+        needsKey: code == 'GEMINI_KEY_MISSING',
+      );
+    } on GeminiException catch (e) {
+      // Both paths failed. Surface the most useful reason.
+      if (localError != null &&
+          (localError.code == 'GEMINI_KEY_INVALID' ||
+              localError.code == 'GEMINI_QUOTA' ||
+              localError.code == 'GEMINI_UNAVAILABLE')) {
+        throw localError;
       }
-    }
-
-    if (backendFailure is GeminiException) {
-      final f = backendFailure;
-      if (f.code == 'GEMINI_KEY_MISSING' || f.code == 'BACKEND_UNREACHABLE') {
+      if (e.code == 'GEMINI_KEY_MISSING' ||
+          e.code == 'BACKEND_UNAVAILABLE' ||
+          e.code == 'BACKEND_UNREACHABLE') {
         throw const GeminiException(
           'Song identification needs a Gemini API key. Add one in Settings → '
           'AI Settings (free at aistudio.google.com/apikey).',
@@ -202,10 +214,16 @@ class GeminiService {
           needsKey: true,
         );
       }
-      throw f;
+      throw e;
+    } catch (_) {
+      if (localError != null) throw localError;
+      throw const GeminiException(
+        'Could not reach the song service. Check your internet connection, or '
+        'add a Gemini API key in Settings.',
+        code: 'BACKEND_UNREACHABLE',
+        needsKey: true,
+      );
     }
-    throw const GeminiException('Song identification failed. Please try again.',
-        code: 'GEMINI_ERROR');
   }
 
   Future<String> _generateDirect(String apiKey, List<Map<String, dynamic>> parts) async {
@@ -223,6 +241,7 @@ class GeminiService {
                     'parts': parts,
                   },
                 ],
+                'generationConfig': {'temperature': 0.2},
               }),
             )
             .timeout(const Duration(seconds: 90));

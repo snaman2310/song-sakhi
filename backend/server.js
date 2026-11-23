@@ -262,7 +262,10 @@ async function callGemini(parts) {
           'Content-Type': 'application/json',
           'x-goog-api-key': GEMINI_API_KEY,
         },
-        body: JSON.stringify({ contents: [{ role: 'user', parts }] }),
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts }],
+          generationConfig: { temperature: 0.2 },
+        }),
         signal: controller.signal,
       });
       const data = await res.json().catch(() => ({}));

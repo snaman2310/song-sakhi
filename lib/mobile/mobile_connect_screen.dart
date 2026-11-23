@@ -13,7 +13,6 @@ class MobileConnectScreen extends StatefulWidget {
 class _MobileConnectScreenState extends State<MobileConnectScreen> {
   bool _spotifyOn = false;
   bool _ytConnected = false;
-  bool _autoAdd = true;
   String? _error;
 
   Future<void> _connect(String kind) async {
@@ -160,16 +159,21 @@ class _MobileConnectScreenState extends State<MobileConnectScreen> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.auto_awesome, size: 20, color: AppColors.primary),
+                        const Icon(Icons.playlist_add_check,
+                            size: 20, color: AppColors.primary),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: Text("Auto-add to 'Nudge Discovery'",
-                              style: AppText.titleMedium(AppColors.onSurface)),
-                        ),
-                        Switch(
-                          value: _autoAdd,
-                          onChanged: (v) => setState(() => _autoAdd = v),
-                          activeColor: AppColors.primaryContainer,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('You choose the playlist',
+                                  style: AppText.titleMedium(AppColors.onSurface)),
+                              Text(
+                                'After each capture you pick which songs to save and where.',
+                                style: AppText.bodySmall(AppColors.onSurfaceVariant),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
