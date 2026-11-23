@@ -56,12 +56,6 @@ class GeminiService {
     await prefs.remove(_kLocalKey);
   }
 
-  /// Basic sanity check for the key format Google issues (always starts with AIza).
-  static bool looksLikeGeminiKey(String key) {
-    final k = key.trim();
-    return k.startsWith('AIza') && k.length >= 30;
-  }
-
   // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
@@ -92,17 +86,19 @@ class GeminiService {
       'reel. Use any lyrics, vocals, spoken titles, artist mentions or recognisable '
       'melody. Only include a song if you are reasonably confident it is actually '
       'the one playing; never pad the list with guesses or similar-sounding tracks. '
-      'Return ONLY a JSON array (no prose, no markdown) of up to 5 objects '
-      'shaped like [{"title":"Song name","artist":"Artist name"}], most likely '
-      'first. If you genuinely cannot identify any song, return [].';
+      'Return ONLY a JSON array (no prose, no markdown) of up to 5 objects shaped like '
+      '[{"title":"Song name","artist":"Artist name"}], most likely first. '
+      'If you genuinely cannot identify any song, return [].';
 
   /// Verifies a key against Google and returns the model that answered.
+  /// The key is treated as an opaque string — we validate it by receiving a
+  /// successful response from Gemini, not by checking its prefix format.
   Future<String> testKey(String key) async {
     final trimmed = key.trim();
-    if (!looksLikeGeminiKey(trimmed)) {
+    if (trimmed.isEmpty) {
       throw const GeminiException(
-        'That does not look like a Gemini API key. Keys start with "AIza".',
-        code: 'GEMINI_KEY_FORMAT',
+        'No Gemini API key provided.',
+        code: 'GEMINI_KEY_EMPTY',
       );
     }
     final errors = <String>[];
@@ -126,9 +122,12 @@ class GeminiService {
             )
             .timeout(const Duration(seconds: 45));
 
-        if (res.statusCode == 200) return model;
+        if (res.statusCode == 200) {
+          final modelName = res.headers['x-goog-model-name'] ?? model;
+          return modelName;
+        }
         final msg = _googleMessage(res.body);
-        if (res.statusCode == 401 || res.statusCode == 403 || msg.toLowerCase().contains('api key not valid')) {
+        if (res.statusCode == 401 || res.statusCode == 403 || msg.toLowerCase().contains('api key')) {
           throw GeminiException('Google rejected this key: $msg', code: 'GEMINI_KEY_INVALID');
         }
         if (res.statusCode == 429) {
@@ -141,8 +140,10 @@ class GeminiService {
         errors.add('$model: $e');
       }
     }
-    throw GeminiException('No Gemini model answered.\n${errors.join('\n')}',
-        code: 'GEMINI_UNAVAILABLE');
+    throw GeminiException(
+      'No Gemini model could handle the request.\n${errors.join('\n')}',
+      code: 'GEMINI_UNAVAILABLE',
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -152,26 +153,7 @@ class GeminiService {
     Map<String, dynamic> backendPayload, {
     required List<Map<String, dynamic>> directParts,
   }) async {
-    GeminiException? localError;
-
-    // 1) A key saved in Settings is fastest and works even if the backend has
-    //    not been updated/deployed yet.
-    final key = await localKey();
-    if (key != null) {
-      try {
-        final text = await _generateDirect(key, directParts);
-        return _toSongs(_parseJsonArray(text));
-      } on GeminiException catch (e) {
-        localError = e;
-      } catch (_) {
-        localError = const GeminiException(
-          'Could not reach Google to identify the song.',
-          code: 'GEMINI_UNREACHABLE',
-        );
-      }
-    }
-
-    // 2) Backend proxy (the key lives in Render, never in the app).
+    // 1) Backend proxy (key stays on the server).
     try {
       final res = await http
           .post(
@@ -179,51 +161,33 @@ class GeminiService {
             headers: {'Content-Type': 'application/json'},
             body: json.encode(backendPayload),
           )
-          .timeout(const Duration(seconds: 90));
+          .timeout(const Duration(seconds: 100));
 
       if (res.statusCode == 200) {
         final body = json.decode(res.body) as Map<String, dynamic>;
         return _toSongs((body['songs'] as List?) ?? const []);
       }
-
-      final isJson = res.body.trimLeft().startsWith('{');
-      final code = isJson ? _errorCode(res.body) : 'BACKEND_UNAVAILABLE';
-      final message = isJson
-          ? _googleMessage(res.body)
-          : 'The song service is not updated yet.';
-      throw GeminiException(
-        message,
-        code: code,
-        needsKey: code == 'GEMINI_KEY_MISSING',
-      );
-    } on GeminiException catch (e) {
-      // Both paths failed. Surface the most useful reason.
-      if (localError != null &&
-          (localError.code == 'GEMINI_KEY_INVALID' ||
-              localError.code == 'GEMINI_QUOTA' ||
-              localError.code == 'GEMINI_UNAVAILABLE')) {
-        throw localError;
-      }
-      if (e.code == 'GEMINI_KEY_MISSING' ||
-          e.code == 'BACKEND_UNAVAILABLE' ||
-          e.code == 'BACKEND_UNREACHABLE') {
-        throw const GeminiException(
-          'Song identification needs a Gemini API key. Add one in Settings → '
-          'AI Settings (free at aistudio.google.com/apikey).',
-          code: 'GEMINI_KEY_MISSING',
-          needsKey: true,
-        );
-      }
-      throw e;
     } catch (_) {
-      if (localError != null) throw localError;
-      throw const GeminiException(
-        'Could not reach the song service. Check your internet connection, or '
-        'add a Gemini API key in Settings.',
-        code: 'BACKEND_UNREACHABLE',
-        needsKey: true,
-      );
+      // fall through to direct key below
     }
+
+    // 2) Direct call with a key the user saved in Settings.
+    final key = await localKey();
+    if (key != null) {
+      try {
+        final text = await _generateDirect(key, directParts);
+        return _toSongs(_parseJsonArray(text));
+      } on GeminiException catch (e) {
+        if (e.code == 'GEMINI_KEY_INVALID' || e.code == 'GEMINI_QUOTA') throw e;
+      }
+    }
+
+    throw const GeminiException(
+      'Song identification needs a Gemini API key. Add one in Settings → '
+      'AI Settings (free at aistudio.google.com/apikey).',
+      code: 'GEMINI_KEY_MISSING',
+      needsKey: true,
+    );
   }
 
   Future<String> _generateDirect(String apiKey, List<Map<String, dynamic>> parts) async {
@@ -318,14 +282,6 @@ class GeminiService {
       if (out.length == 5) break;
     }
     return out;
-  }
-
-  String _errorCode(String body) {
-    try {
-      final map = json.decode(body);
-      if (map is Map && map['code'] != null) return map['code'].toString();
-    } catch (_) {}
-    return 'GEMINI_ERROR';
   }
 
   String _googleMessage(String body) {

@@ -75,8 +75,10 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
       _toast('Paste your Gemini API key first.');
       return;
     }
-    if (!GeminiService.looksLikeGeminiKey(key)) {
-      _toast('That key looks wrong — Gemini keys start with "AIza".', ok: false);
+    // Key is treated as opaque string — validate by trying a real API call later,
+    // or just check it looks reasonably long (Google keys are ~40 chars).
+    if (key.length < 20) {
+      _toast('Key seems too short. Gemini keys are typically ~40 characters.', ok: false);
       return;
     }
     setState(() => _saving = true);

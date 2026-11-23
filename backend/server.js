@@ -47,20 +47,22 @@ const SPOTIFY_SCOPE = 'playlist-modify-public playlist-modify-private user-read-
 
 // ---------------------------------------------------------------------------
 // Gemini (song identification) – the key lives ONLY here, never in the app.
-// Set GEMINI_API_KEY in the Render dashboard. Get one at
-// https://aistudio.google.com/apikey (it starts with "AIza").
+// Set GEMINI_API_KEY in the Render dashboard at
+// https://aistudio.google.com/apikey. The key is treated as an opaque string
+// — we validate it by making actual API requests, not by checking its prefix.
 // ---------------------------------------------------------------------------
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 // "gemini-flash-latest" is a stable alias Google keeps pointed at the newest
 // Flash model, so this list does not go stale when a version is retired.
+// Order matters: we try the stable alias first, then other Flash models.
 const GEMINI_MODELS = [
-  process.env.GEMINI_MODEL || '',
   'gemini-flash-latest',
   'gemini-2.5-flash',
   'gemini-2.0-flash',
   'gemini-2.5-flash-lite',
+  process.env.GEMINI_MODEL,
 ].filter(Boolean);
 
 // ---------------------------------------------------------------------------
@@ -411,7 +413,6 @@ app.post('/api/refresh', async (req, res) => {
 app.get('/api/gemini/health', async (req, res) => {
   const payload = {
     configured: !!GEMINI_API_KEY,
-    keyLooksValid: /^AIza[0-9A-Za-z_\-]{10,}$/.test(GEMINI_API_KEY),
     models: GEMINI_MODELS,
   };
   if (!GEMINI_API_KEY) {
