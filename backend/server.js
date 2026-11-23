@@ -11,6 +11,17 @@ const crypto = require('crypto');
 
 const app = express();
 app.use(cookieParser());
+app.use(express.json({ limit: '25mb' }));
+
+// The web build (song-sakhi.onrender.com) calls /api/* from the browser, so it
+// needs CORS. No cookies are used on these routes, hence no credentials.
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 
 // ---------------------------------------------------------------------------
 // Configuration from environment variables (set these in the Render dashboard)
@@ -33,6 +44,24 @@ const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
 
 const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/youtube.force-ssl';
 const SPOTIFY_SCOPE = 'playlist-modify-public playlist-modify-private user-read-email';
+
+// ---------------------------------------------------------------------------
+// Gemini (song identification) – the key lives ONLY here, never in the app.
+// Set GEMINI_API_KEY in the Render dashboard. Get one at
+// https://aistudio.google.com/apikey (it starts with "AIza").
+// ---------------------------------------------------------------------------
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+// "gemini-flash-latest" is a stable alias Google keeps pointed at the newest
+// Flash model, so this list does not go stale when a version is retired.
+const GEMINI_MODELS = [
+  process.env.GEMINI_MODEL || '',
+  'gemini-flash-latest',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-2.5-flash-lite',
+].filter(Boolean);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -202,6 +231,243 @@ app.get('/auth/spotify/callback', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Song identification (Gemini proxy)
+// ---------------------------------------------------------------------------
+class GeminiError extends Error {
+  constructor(message, { status = 502, code = 'GEMINI_ERROR', model = '' } = {}) {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.model = model;
+  }
+}
+
+async function callGemini(parts) {
+  if (!GEMINI_API_KEY) {
+    throw new GeminiError(
+      'Song identification is not configured on the server yet. Add GEMINI_API_KEY in Render.',
+      { status: 503, code: 'GEMINI_KEY_MISSING' },
+    );
+  }
+
+  let lastError = null;
+  for (const model of GEMINI_MODELS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 90000);
+    try {
+      const res = await fetch(`${GEMINI_BASE}/${model}:generateContent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': GEMINI_API_KEY,
+        },
+        body: JSON.stringify({ contents: [{ role: 'user', parts }] }),
+        signal: controller.signal,
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok) {
+        const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+        if (!text.trim()) {
+          lastError = new GeminiError('Gemini returned an empty answer.', {
+            status: 502,
+            code: 'GEMINI_EMPTY',
+            model,
+          });
+          continue;
+        }
+        return { text, model };
+      }
+
+      const msg = data?.error?.message || `HTTP ${res.status}`;
+
+      // A dead / leaked key will never work on another model – fail fast.
+      if (res.status === 401 || res.status === 403 || /API key not valid/i.test(msg)) {
+        throw new GeminiError(`Gemini rejected the API key: ${msg}`, {
+          status: 401,
+          code: 'GEMINI_KEY_INVALID',
+          model,
+        });
+      }
+      if (res.status === 429) {
+        throw new GeminiError(`Gemini rate limit hit: ${msg}`, {
+          status: 429,
+          code: 'GEMINI_QUOTA',
+          model,
+        });
+      }
+
+      // 400/404 usually means this model is retired or unsupported here.
+      lastError = new GeminiError(`${model}: ${msg}`, {
+        status: res.status === 404 ? 404 : 502,
+        code: res.status === 404 ? 'GEMINI_MODEL_UNAVAILABLE' : 'GEMINI_ERROR',
+        model,
+      });
+    } catch (err) {
+      if (err instanceof GeminiError) {
+        // Invalid key / quota: trying older models is pointless.
+        if (err.code === 'GEMINI_KEY_INVALID' || err.code === 'GEMINI_QUOTA') throw err;
+        lastError = err;
+      } else if (err.name === 'AbortError') {
+        lastError = new GeminiError('Gemini request timed out.', {
+          status: 504,
+          code: 'GEMINI_TIMEOUT',
+          model,
+        });
+      } else {
+        lastError = new GeminiError(`Gemini request failed: ${err.message}`, {
+          status: 502,
+          code: 'GEMINI_NETWORK',
+          model,
+        });
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastError || new GeminiError('No Gemini model could handle the request.', {
+    status: 502,
+    code: 'GEMINI_UNAVAILABLE',
+  });
+}
+
+function parseSongs(text) {
+  const cleaned = String(text).replace(/```(?:json)?/gi, '').trim();
+  const start = cleaned.indexOf('[');
+  const end = cleaned.lastIndexOf(']');
+  if (start === -1 || end === -1 || end <= start) return [];
+  let list;
+  try {
+    list = JSON.parse(cleaned.slice(start, end + 1));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((s) => s && typeof s === 'object')
+    .map((s) => ({
+      title: String(s.title ?? s.song ?? s.track ?? '').trim(),
+      artist: String(s.artist ?? s.artistName ?? '').trim(),
+    }))
+    .filter((s) => s.title)
+    .slice(0, 5);
+}
+
+const SONG_PROMPT =
+  'You identify music from audio clips. Listen to the clip from an Instagram reel. ' +
+  'Use any lyrics, vocals, spoken titles, artist mentions or recognisable melody. ' +
+  'Only include a song if you are reasonably confident it is actually the one playing; ' +
+  'never pad the list with guesses or similar-sounding tracks. ' +
+  'Return ONLY a JSON array (no prose, no markdown) of up to 5 objects shaped like ' +
+  '[{"title":"Song name","artist":"Artist name"}], most likely first. ' +
+  'If you genuinely cannot identify any song, return [].';
+
+// ---------------------------------------------------------------------------
+// Token refresh – Google/Spotify access tokens expire after ~1 hour.
+// ---------------------------------------------------------------------------
+app.post('/api/refresh', async (req, res) => {
+  const { provider, refreshToken } = req.body || {};
+  if (!refreshToken) {
+    return res.status(400).json({ error: 'Missing refreshToken', code: 'BAD_REQUEST' });
+  }
+  try {
+    const isSpotify = provider === 'spotify';
+    const clientId = isSpotify ? SPOTIFY_CLIENT_ID : GOOGLE_CLIENT_ID;
+    const clientSecret = isSpotify ? SPOTIFY_CLIENT_SECRET : GOOGLE_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      throw new Error(`${isSpotify ? 'Spotify' : 'Google'} is not configured on the server.`);
+    }
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+    });
+    const tokenRes = await fetch(isSpotify ? SPOTIFY_TOKEN_URL : GOOGLE_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+    const data = await tokenRes.json().catch(() => ({}));
+    if (!tokenRes.ok) {
+      throw new Error(data.error_description || data.error || `HTTP ${tokenRes.status}`);
+    }
+    res.json({
+      access_token: data.access_token,
+      // Spotify does not rotate refresh tokens; Google usually omits it.
+      refresh_token: data.refresh_token || refreshToken,
+      expires_in: data.expires_in || 3600,
+    });
+  } catch (err) {
+    console.error('[refresh]', err.message);
+    res.status(400).json({ error: err.message, code: 'REFRESH_FAILED' });
+  }
+});
+
+app.get('/api/gemini/health', async (req, res) => {
+  const payload = {
+    configured: !!GEMINI_API_KEY,
+    keyLooksValid: /^AIza[0-9A-Za-z_\-]{10,}$/.test(GEMINI_API_KEY),
+    models: GEMINI_MODELS,
+  };
+  if (!GEMINI_API_KEY) {
+    return res.status(503).json({
+      ...payload,
+      ok: false,
+      code: 'GEMINI_KEY_MISSING',
+      error: 'GEMINI_API_KEY is not set on the server.',
+    });
+  }
+  try {
+    const { model } = await callGemini([{ text: 'Reply with exactly: OK' }]);
+    res.json({ ...payload, ok: true, model });
+  } catch (err) {
+    res.status(err.status || 502).json({
+      ...payload,
+      ok: false,
+      code: err.code || 'GEMINI_ERROR',
+      error: err.message,
+    });
+  }
+});
+
+app.post('/api/identify', async (req, res) => {
+  try {
+    const { audioBase64, mimeType, transcript } = req.body || {};
+    if (!audioBase64 && !transcript) {
+      return res.status(400).json({
+        error: 'Provide audioBase64 or transcript.',
+        code: 'BAD_REQUEST',
+      });
+    }
+
+    const parts = [];
+    if (audioBase64) {
+      parts.push({
+        inline_data: {
+          mime_type: mimeType || 'audio/m4a',
+          data: audioBase64,
+        },
+      });
+    }
+    parts.push({
+      text: transcript
+        ? `${SONG_PROMPT}\n\nThe clip transcript was: "${transcript}"`
+        : SONG_PROMPT,
+    });
+
+    const { text, model } = await callGemini(parts);
+    res.json({ songs: parseSongs(text), model });
+  } catch (err) {
+    console.error('[identify]', err.code || '', err.message);
+    res.status(err.status || 502).json({
+      error: err.message,
+      code: err.code || 'GEMINI_ERROR',
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`song-sakhi-auth listening on ${PORT}`);
   console.log(`BACKEND_URL=${BACKEND_URL}`);
@@ -210,4 +476,5 @@ app.listen(PORT, () => {
   console.log(`Google secret configured: ${!!GOOGLE_CLIENT_SECRET}`);
   console.log(`Spotify client id configured: ${!!SPOTIFY_CLIENT_ID}`);
   console.log(`Spotify secret configured: ${!!SPOTIFY_CLIENT_SECRET}`);
+  console.log(`Gemini key configured: ${!!GEMINI_API_KEY}`);
 });

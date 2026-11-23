@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
-import '../widgets.dart';
 
 class SongSelectionScreen extends StatefulWidget {
   final List<Map<String, String>>? suggestions;

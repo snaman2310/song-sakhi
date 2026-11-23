@@ -20,3 +20,5 @@ services:
         value: 3a108eb4fbb846bcafe8c52c359098f6
       - key: SPOTIFY_CLIENT_SECRET
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false

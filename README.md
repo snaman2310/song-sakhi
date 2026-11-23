@@ -1,61 +1,59 @@
 # Song Sakhi – Music Nudge
 
-A Flutter app that lets you:
+Identify the song playing in an Instagram reel and save it to Spotify or
+YouTube Music.
 
-1. Log in with Spotify or YouTube Music.
-2. Tap a “Nudge” button while scrolling Instagram reels.
-3. The app listens to a short audio clip, transcribes it (Whisper on mobile / placeholder on web), sends the transcript to Gemini Flash, and shows a list of suggested songs.
-4. You check the songs you want, pick a playlist, and the app adds them to Spotify / YouTube Music.
+**Flow:** sign in → connect Spotify / YouTube Music → system setup → home →
+capture a reel clip → review detected songs → pick a playlist → saved.
 
-## Project structure
+## Where the API keys live
 
+| Key | Where it belongs | Why |
+|-----|------------------|-----|
+| `GEMINI_API_KEY` | **Render env var** on `song-sakhi-auth` (preferred) **or** entered in the app's Settings screen | Never commit it. The backend proxies the call so the key is not shipped in the APK. |
+| `GOOGLE_CLIENT_SECRET` | Render env var | OAuth token exchange |
+| `SPOTIFY_CLIENT_SECRET` | Render env var | OAuth token exchange |
+
+### Getting a Gemini key
+
+1. Open <https://aistudio.google.com/apikey>
+2. **Create API key** → copy it (it starts with `AIza`)
+3. Either:
+   - Render dashboard → `song-sakhi-auth` → **Environment** → add
+     `GEMINI_API_KEY` → save (service redeploys), **or**
+   - In the app: **Settings → AI Settings** → paste → *Save key* → *Test key*
+
+Verify the server side any time:
+
+```bash
+curl https://song-sakhi-auth1.onrender.com/api/gemini/health
+# {"configured":true,"ok":true,"model":"gemini-flash-latest", ...}
 ```
-lib/
-  main.dart
-  auth_service.dart
-  gemini_service.dart
-  playlist_service.dart
-  whisper_service.dart
-  screens/
-    login_screen.dart
-    home_screen.dart
-    listening_screen.dart
-    suggestions_screen.dart
-    playlist_selector_screen.dart
-    confirmation_screen.dart
-web/
-  index.html
-  manifest.json
-.github/workflows/flutter-web.yml
-pubspec.yaml
-```
 
-## Quick start – build the web bundle with GitHub Actions
+The backend tries `gemini-flash-latest` first — a stable Google alias that always
+points at the newest Flash model — so model retirements don't break the app.
 
-1. Push your changes to the `main` branch.
-2. Go to the **Actions** tab of this repository.
-3. Wait for the **Build Flutter Web** workflow to finish (green check).
-4. Click the workflow run, scroll to **Artifacts**, and download `flutter-web-bundle.zip`.
-5. Unzip it – you now have a `build/web/` folder.
+## Backend endpoints
 
-## Deploy to Render
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /health` | Liveness |
+| `GET /auth/google`, `GET /auth/spotify` | Start OAuth (`?platform=mobile` for the APK) |
+| `POST /api/refresh` | Refresh an expired access token (server holds the secret) |
+| `POST /api/identify` | Gemini song identification (`{audioBase64, mimeType}` or `{transcript}`) |
+| `GET /api/gemini/health` | Check that the server has a working Gemini key |
 
-1. Open your Render dashboard → your **Static Site**.
-2. Click **Manual deploy** → **Upload folder**.
-3. Select the unzipped `build/web` folder.
-4. Wait for the deployment to finish, then open the Render URL.
+## Builds
 
-## Adding real API keys (later)
+- **Android APK:** `.github/workflows/build-apk.yml` → artifact `song-sakhi-apk`
+- **Web:** `.github/workflows/flutter-web.yml` → publishes to the `gh-pages`
+  branch, which the Render static site serves
 
-Replace the placeholders in:
+## Notes
 
-| File | Placeholder |
-|------|-------------|
-| `lib/auth_service.dart` | `YOUR_SPOTIFY_CLIENT_ID`, `YOUR_SPOTIFY_CLIENT_SECRET`, `YOUR_SPOTIFY_REDIRECT_URI`, `YOUR_YT_CLIENT_ID`, `YOUR_YT_CLIENT_SECRET`, `YOUR_YT_REDIRECT_URI` |
-| `lib/gemini_service.dart` | `YOUR_GEMINI_API_KEY` |
-
-After editing, push again – the GitHub Actions workflow will rebuild the web bundle, and you can re‑upload it to Render.
-
-## Whisper note
-
-The `flutter_whisper` native package has been removed from the web build so the app can compile for the browser. On Android/iOS you can re‑add it to `pubspec.yaml` and use the real on‑device Whisper model. For the web prototype the transcript is a placeholder (`"Boys a Lose"`).
+- Audio is captured as 16 kHz mono WAV (Gemini's supported inline format) and is
+  never stored after identification.
+- Gemini identifies music from lyrics / vocals / recognisable melody. It is not
+  an audio-fingerprinting service, so fully instrumental reels may not resolve.
+- The floating Instagram overlay is **not implemented yet**; capture is manual
+  from the app for now.

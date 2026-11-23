@@ -8,6 +8,7 @@ import 'mobile/mobile_connect_screen.dart';
 import 'mobile/mobile_callback_screen.dart';
 import 'mobile/mobile_capture_screen.dart';
 import 'mobile/mobile_permissions_screen.dart';
+import 'mobile/mobile_settings_screen.dart';
 import 'screens/saved_songs_screen.dart';
 import 'screens/song_selection_screen.dart';
 import 'screens/playlist_save_screen.dart';
@@ -17,18 +18,22 @@ final _linkController = StreamController<Uri>.broadcast();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await AuthService().initialise();
+  final auth = AuthService();
+  await auth.initialise();
+  final hasSession =
+      await auth.isConnected('spotify') || await auth.isConnected('google');
 
   final appLinks = AppLinks();
   final initial = await appLinks.getInitialLink();
   if (initial != null) _linkController.add(initial);
   appLinks.uriLinkStream.listen((uri) => _linkController.add(uri));
 
-  runApp(const MobileApp());
+  runApp(MobileApp(initialRoute: hasSession ? '/home' : '/'));
 }
 
 class MobileApp extends StatefulWidget {
-  const MobileApp({super.key});
+  final String initialRoute;
+  const MobileApp({this.initialRoute = '/', super.key});
   @override
   State<MobileApp> createState() => _MobileAppState();
 }
@@ -62,7 +67,7 @@ class _MobileAppState extends State<MobileApp> {
       title: 'Song Sakhi',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      initialRoute: '/',
+      initialRoute: widget.initialRoute,
       routes: {
         '/': (ctx) => const MobileLoginScreen(),
         '/connect': (ctx) => const MobileConnectScreen(),
@@ -71,6 +76,7 @@ class _MobileAppState extends State<MobileApp> {
           return MobileCallbackScreen(uriString: args is String ? args : null);
         },
         '/permissions': (ctx) => const MobilePermissionsScreen(),
+        '/settings': (ctx) => const MobileSettingsScreen(),
         '/home': (ctx) => const SavedSongsScreen(),
         // "Capture Reel" FAB / Discover tab -> real audio capture flow.
         '/nudge': (ctx) => const MobileCaptureScreen(),

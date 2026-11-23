@@ -30,7 +30,7 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               child: Column(
                 children: [
-                  const StatusPill(text: 'V2.4 PRO • REALTIME AI'),
+                  const StatusPill(text: 'BETA • GEMINI FLASH'),
                   const SizedBox(height: 28),
                   const SoundwaveLogo(),
                   const SizedBox(height: 24),
@@ -41,8 +41,8 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Intelligent background reel listening and instant playlist '
-                    'curation powered by Gemini 1.5 Flash.',
+                    'Catch every track. Instantly. Identify the song playing in a '
+                    'reel and drop it straight into your playlist.',
                     textAlign: TextAlign.center,
                     style: AppText.bodyMedium(AppColors.onSurfaceVariant),
                   ),
@@ -104,7 +104,13 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
                           textAlign: TextAlign.center),
                     ),
                   ],
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 4),
+                  TextButton(
+                    onPressed: () =>
+                        Navigator.pushReplacementNamed(context, '/connect'),
+                    child: const Text('Skip — connect Spotify instead'),
+                  ),
+                  const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -115,14 +121,14 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
                     ],
                   ),
                   const SizedBox(height: 30),
-                  const _Feature(Icons.layers, AppColors.primary,
-                      'Seamless Instagram Overlay', 'Instant floating nudges while you scroll'),
+                  const _Feature(Icons.mic, AppColors.primary,
+                      'One-tap reel capture', 'Listen for a few seconds to identify the song'),
                   const SizedBox(height: 10),
                   const _Feature(Icons.sync, AppColors.primaryContainer,
-                      'Direct Sync to Spotify & YT Music', 'Auto-populates your playlist library'),
+                      'Sync to Spotify & YT Music', 'Adds the track straight to your playlist'),
                   const SizedBox(height: 10),
                   const _Feature(Icons.shield, AppColors.tertiary,
-                      'Zero Audio Storage', 'On-device parsing only'),
+                      'Audio never stored', 'Analysed for the capture, then discarded'),
                 ],
               ),
             ),

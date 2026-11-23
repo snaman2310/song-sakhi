@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
+
 import '../theme.dart';
 import '../widgets.dart';
 
+/// Real system-setup screen. Every action launches the corresponding Android
+/// permission page and the state is re-read when the user comes back.
 class MobilePermissionsScreen extends StatefulWidget {
   const MobilePermissionsScreen({super.key});
+
   @override
   State<MobilePermissionsScreen> createState() => _MobilePermissionsScreenState();
 }
 
 class _MobilePermissionsScreenState extends State<MobilePermissionsScreen>
     with WidgetsBindingObserver {
-  bool _micGranted = false;
-  bool _overlayDone = false;
-  bool _batteryDone = false;
+  bool _mic = false;
+  bool _overlay = false;
+  bool _battery = false;
 
   @override
   void initState() {
@@ -30,31 +34,32 @@ class _MobilePermissionsScreenState extends State<MobilePermissionsScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Re-check when the user comes back from Android Settings.
     if (state == AppLifecycleState.resumed) _check();
   }
 
   Future<void> _check() async {
-    final status = await Permission.microphone.status;
-    if (mounted) setState(() => _micGranted = status.isGranted);
+    final mic = await Permission.microphone.status;
+    final overlay = await Permission.systemAlertWindow.status;
+    final battery = await Permission.ignoreBatteryOptimizations.status;
+    if (!mounted) return;
+    setState(() {
+      _mic = mic.isGranted;
+      _overlay = overlay.isGranted;
+      _battery = battery.isGranted;
+    });
   }
 
-  Future<void> _requestMic() async {
-    final status = await Permission.microphone.request();
+  Future<void> _request(Permission permission) async {
+    final status = await permission.request();
     if (status.isPermanentlyDenied) {
       await openAppSettings();
-      return;
     }
-    if (mounted) setState(() => _micGranted = status.isGranted);
-  }
-
-  Future<void> _openSettings() async {
-    await openAppSettings();
+    await _check();
   }
 
   @override
   Widget build(BuildContext context) {
-    final allDone = _micGranted && _overlayDone && _batteryDone;
+    final micOnly = _mic;
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -65,53 +70,49 @@ class _MobilePermissionsScreenState extends State<MobilePermissionsScreen>
               const StepProgress(
                   left: 'System Setup', right: 'Step 2 of 2 (100%)', fraction: 1.0),
               const SizedBox(height: 22),
-              Text('Enable Floating Nudge',
+              Text('Enable the Nudge',
                   style: AppText.headlineLarge(AppColors.onSurface)),
               const SizedBox(height: 8),
               Text(
-                'Music Nudge needs a few Android permissions to listen to reels and '
-                'show the floating nudge. Tap each item to open Settings and enable it.',
+                'Each button below opens the exact Android setting it needs. '
+                'Come back to this screen afterwards — statuses refresh automatically.',
                 style: AppText.bodyMedium(AppColors.onSurfaceVariant),
               ),
               const SizedBox(height: 24),
 
               _PermCard(
-                icon: Icons.picture_in_picture_alt,
+                icon: Icons.mic,
                 color: AppColors.primary,
-                title: 'Display Over Other Apps',
-                description: 'Lets the compact Nudge button float above Instagram and '
-                    'TikTok while you scroll.',
-                done: _overlayDone,
-                actionLabel: _overlayDone ? 'Enabled' : 'Open Settings',
-                onAction: () async {
-                  await _openSettings();
-                  if (mounted) setState(() => _overlayDone = true);
-                },
+                title: 'Microphone (required)',
+                description: 'Needed to capture the reel audio so songs can be '
+                    'identified. Opens the system permission dialog.',
+                done: _mic,
+                actionLabel: _mic ? 'Granted' : 'Allow microphone',
+                onAction: _mic ? null : () => _request(Permission.microphone),
               ),
               const SizedBox(height: 12),
               _PermCard(
-                icon: Icons.mic,
+                icon: Icons.picture_in_picture_alt,
                 color: AppColors.secondaryContainer,
-                title: 'Media Listener Audio',
-                description: 'Allows the app to capture a short clip of the reel audio '
-                    'so Gemini can identify the song.',
-                done: _micGranted,
-                actionLabel: _micGranted ? 'Granted' : 'Grant Permission',
-                onAction: _requestMic,
+                title: 'Display over other apps',
+                description: 'Lets the floating Nudge button appear above Instagram '
+                    'and TikTok. Opens Settings → Special app access → Display over '
+                    'other apps.',
+                done: _overlay,
+                actionLabel: _overlay ? 'Enabled' : 'Open setting',
+                onAction: _overlay ? null : () => _request(Permission.systemAlertWindow),
               ),
               const SizedBox(height: 12),
               _PermCard(
                 icon: Icons.battery_saver,
                 color: AppColors.tertiary,
-                title: 'Battery (Recommended)',
-                description: 'Exclude Music Nudge from battery optimisation so the '
-                    'nudge stays responsive.',
-                done: _batteryDone,
-                actionLabel: _batteryDone ? 'Done' : 'Open Settings',
-                onAction: () async {
-                  await _openSettings();
-                  if (mounted) setState(() => _batteryDone = true);
-                },
+                title: 'Battery optimisation (recommended)',
+                description: 'Stops Android from killing the nudge in the background. '
+                    'Opens the system "ignore battery optimisation" prompt.',
+                done: _battery,
+                actionLabel: _battery ? 'Exempt' : 'Open setting',
+                onAction:
+                    _battery ? null : () => _request(Permission.ignoreBatteryOptimizations),
               ),
               const SizedBox(height: 18),
 
@@ -123,13 +124,12 @@ class _MobilePermissionsScreenState extends State<MobilePermissionsScreen>
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.verified_user,
-                        size: 22, color: AppColors.primary),
+                    const Icon(Icons.verified_user, size: 22, color: AppColors.primary),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Audio is analysed only for the active capture and never '
-                        'stored on disk.',
+                        'Only the clip you capture is sent for identification. '
+                        'Nothing is recorded in the background.',
                         style: AppText.bodySmall(AppColors.onSurfaceVariant),
                       ),
                     ),
@@ -141,20 +141,24 @@ class _MobilePermissionsScreenState extends State<MobilePermissionsScreen>
               SizedBox(
                 height: 52,
                 child: ElevatedButton.icon(
-                  onPressed: _micGranted
-                      ? () => Navigator.pushReplacementNamed(context, '/home')
+                  onPressed: micOnly
+                      ? () => Navigator.pushNamedAndRemoveUntil(
+                          context, '/home', (r) => false)
                       : null,
                   icon: const Icon(Icons.arrow_right_alt),
-                  label: Text(allDone
-                      ? 'All Set! Launch Music Nudge'
-                      : 'Continue (Microphone required)'),
+                  label: Text(micOnly ? 'Continue to Song Sakhi' : 'Microphone required'),
                 ),
               ),
-              if (!_micGranted)
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: () => Navigator.pushNamed(context, '/settings'),
+                child: const Text('Open full settings'),
+              ),
+              if (!micOnly)
                 const Padding(
-                  padding: EdgeInsets.only(top: 10),
+                  padding: EdgeInsets.only(top: 4),
                   child: Text(
-                    'Grant the microphone permission above to continue.',
+                    'Tap "Allow microphone" above to continue. The other two are optional.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: AppColors.secondary, fontSize: 12),
                   ),
@@ -174,7 +178,7 @@ class _PermCard extends StatelessWidget {
   final String description;
   final bool done;
   final String actionLabel;
-  final VoidCallback onAction;
+  final VoidCallback? onAction;
 
   const _PermCard({
     required this.icon,
@@ -204,8 +208,9 @@ class _PermCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: const BoxDecoration(
-                color: AppColors.surfaceHigh,
-                borderRadius: BorderRadius.all(Radius.circular(12))),
+              color: AppColors.surfaceHigh,
+              borderRadius: BorderRadius.all(Radius.circular(12)),
+            ),
             child: Icon(icon, size: 24, color: color),
           ),
           const SizedBox(width: 12),
@@ -213,15 +218,20 @@ class _PermCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(children: [
-                  Expanded(
-                    child: Text(title, style: AppText.titleMedium(AppColors.onSurface)),
-                  ),
-                  if (done)
-                    const Icon(Icons.check_circle, size: 16, color: AppColors.primary),
-                ]),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(title,
+                          style: AppText.titleMedium(AppColors.onSurface)),
+                    ),
+                    if (done)
+                      const Icon(Icons.check_circle,
+                          size: 16, color: AppColors.primary),
+                  ],
+                ),
                 const SizedBox(height: 6),
-                Text(description, style: AppText.bodySmall(AppColors.onSurfaceVariant)),
+                Text(description,
+                    style: AppText.bodySmall(AppColors.onSurfaceVariant)),
                 const SizedBox(height: 10),
                 Align(
                   alignment: Alignment.centerRight,
@@ -233,10 +243,14 @@ class _PermCard extends StatelessWidget {
                           done ? AppColors.primary : AppColors.onSurface,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(999)),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                     ),
-                    child: Text(actionLabel, style: AppText.labelMedium(
-                        done ? AppColors.primary : AppColors.onSurface)),
+                    child: Text(
+                      actionLabel,
+                      style: AppText.labelMedium(
+                          done ? AppColors.primary : AppColors.onSurface),
+                    ),
                   ),
                 ),
               ],

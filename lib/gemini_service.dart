@@ -1,97 +1,325 @@
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 
-/// Shared Gemini client. Uses current (2026) model names with fallbacks so the
-/// app keeps working when a model is deprecated.
-class GeminiService {
-  static const _apiKey = 'AQ.Ab8RN6Lc3C8Gq9HZ4aai02zKrmzNaF0IXWyKOhHW9sFBKh3GqA';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
-  // Ordered newest -> fallback. All support multimodal (text + audio) input.
-  static const _models = [
-    'gemini-3.6-flash',
-    'gemini-3.5-flash-lite',
+/// Error thrown by [GeminiService]. [needsKey] is true when the only way
+/// forward is for the user to supply a Gemini API key in Settings.
+class GeminiException implements Exception {
+  final String message;
+  final String code;
+  final bool needsKey;
+
+  const GeminiException(this.message, {this.code = 'GEMINI_ERROR', this.needsKey = false});
+
+  @override
+  String toString() => message;
+}
+
+/// Identifies songs from audio using Gemini.
+///
+/// The API key is **never** bundled in the app:
+///   1. Preferred path: the Node backend on Render holds `GEMINI_API_KEY` in its
+///      environment and proxies the request (`POST /api/identify`).
+///   2. Fallback path: a key the user pasted in Settings is stored on-device and
+///      used to call Google directly (useful if the backend has no key yet).
+class GeminiService {
+  static const backendUrl = 'https://song-sakhi-auth1.onrender.com';
+  static const _geminiBase = 'https://generativelanguage.googleapis.com/v1beta/models';
+  static const _kLocalKey = 'gemini_api_key';
+
+  /// `gemini-flash-latest` is a stable alias Google keeps pointing at the newest
+  /// Flash model, so this list does not rot when a version is retired.
+  static const _models = <String>[
+    'gemini-flash-latest',
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
     'gemini-2.5-flash-lite',
   ];
 
-  Future<Map<String, dynamic>> _generate(List<Map<String, dynamic>> parts) async {
-    String last = 'unknown error';
-    for (final model in _models) {
-      final url = Uri.parse(
-          'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$_apiKey');
-      try {
-        final response = await http.post(
-          url,
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode({
-            'contents': [{'role': 'user', 'parts': parts}],
-          }),
-        );
-        if (response.statusCode == 200) {
-          return json.decode(response.body) as Map<String, dynamic>;
-        }
-        last = '${response.statusCode}: ${response.body}';
-        // Bad key / quota -> no point trying other models.
-        if (response.statusCode == 400 || response.statusCode == 403) break;
-      } catch (e) {
-        last = e.toString();
-      }
-    }
-    throw Exception('Gemini error: $last');
+  // ---------------------------------------------------------------------------
+  // Local key storage
+  // ---------------------------------------------------------------------------
+  Future<String?> localKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = prefs.getString(_kLocalKey)?.trim();
+    return (key == null || key.isEmpty) ? null : key;
   }
 
-  String _extractText(Map<String, dynamic> data) {
-    try {
-      return data['candidates'][0]['content']['parts'][0]['text'] as String;
-    } catch (_) {
-      throw Exception('Unexpected Gemini response: ${json.encode(data)}');
-    }
+  Future<void> saveLocalKey(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kLocalKey, key.trim());
   }
 
-  List<dynamic> _parseJsonArray(String raw) {
-    var text = raw.trim();
-    text = text.replaceAll(RegExp(r'```(?:json)?'), '').trim();
-    final start = text.indexOf('[');
-    final end = text.lastIndexOf(']');
-    if (start == -1 || end == -1 || end <= start) {
-      // Model returned something unexpected -> treat as no songs.
-      return const [];
-    }
-    return json.decode(text.substring(start, end + 1)) as List<dynamic>;
+  Future<void> clearLocalKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kLocalKey);
   }
 
-  /// Text-only path (web transcript flow).
-  Future<List<Map<String, String>>> suggestSongs(String transcript) async {
-    final data = await _generate([
-      {
-        'text': 'Given the following transcript from an Instagram reel, list the '
-            'most likely song titles and artists (max 5). Return ONLY a JSON array '
-            'of objects with "title" and "artist" keys.\nTranscript: "$transcript"',
-      },
-    ]);
-    return _toSongs(_parseJsonArray(_extractText(data)));
+  /// Basic sanity check for the key format Google issues (always starts with AIza).
+  static bool looksLikeGeminiKey(String key) {
+    final k = key.trim();
+    return k.startsWith('AIza') && k.length >= 30;
   }
 
+  // ---------------------------------------------------------------------------
+  // Public API
+  // ---------------------------------------------------------------------------
   /// Audio path (mobile reel capture). [base64Audio] is raw file bytes.
   Future<List<Map<String, String>>> identifyFromAudio(
     String base64Audio, {
     String mimeType = 'audio/m4a',
   }) async {
-    final data = await _generate([
-      {'inline_data': {'mime_type': mimeType, 'data': base64Audio}},
+    final payload = {'audioBase64': base64Audio, 'mimeType': mimeType};
+    return _identify(payload, directParts: [
       {
-        'text': 'This is a short audio clip from an Instagram reel. First transcribe '
-            'any song titles, artist names, or lyrics you hear. Then return ONLY a '
-            'JSON array of up to 5 objects with "title" and "artist" keys. '
-            'If you cannot identify any songs, return [].',
+        'inline_data': {'mime_type': mimeType, 'data': base64Audio},
       },
+      {'text': _songPrompt},
     ]);
-    return _toSongs(_parseJsonArray(_extractText(data)));
+  }
+
+  /// Text-only path (web transcript flow).
+  Future<List<Map<String, String>>> suggestSongs(String transcript) async {
+    final payload = {'transcript': transcript};
+    return _identify(payload, directParts: [
+      {'text': '$_songPrompt\n\nThe clip transcript was: "$transcript"'},
+    ]);
+  }
+
+  static const _songPrompt =
+      'You identify music from audio clips. Listen to the clip from an Instagram '
+      'reel. Use any lyrics, vocals, spoken titles, artist mentions or recognisable '
+      'melody. Only include a song if you are reasonably confident it is actually '
+      'the one playing; never pad the list with guesses or similar-sounding tracks. '
+      'Return ONLY a JSON array (no prose, no markdown) of up to 5 objects '
+      'shaped like [{"title":"Song name","artist":"Artist name"}], most likely '
+      'first. If you genuinely cannot identify any song, return [].';
+
+  /// Verifies a key against Google and returns the model that answered.
+  Future<String> testKey(String key) async {
+    final trimmed = key.trim();
+    if (!looksLikeGeminiKey(trimmed)) {
+      throw const GeminiException(
+        'That does not look like a Gemini API key. Keys start with "AIza".',
+        code: 'GEMINI_KEY_FORMAT',
+      );
+    }
+    final errors = <String>[];
+    for (final model in _models) {
+      try {
+        final res = await http
+            .post(
+              Uri.parse('$_geminiBase/$model:generateContent'),
+              headers: {'Content-Type': 'application/json', 'x-goog-api-key': trimmed},
+              body: json.encode({
+                'contents': [
+                  {
+                    'role': 'user',
+                    'parts': [
+                      {'text': 'Reply with exactly: OK'},
+                    ],
+                  },
+                ],
+              }),
+            )
+            .timeout(const Duration(seconds: 45));
+
+        if (res.statusCode == 200) return model;
+        final msg = _googleMessage(res.body);
+        if (res.statusCode == 401 || res.statusCode == 403 || msg.toLowerCase().contains('api key not valid')) {
+          throw GeminiException('Google rejected this key: $msg', code: 'GEMINI_KEY_INVALID');
+        }
+        if (res.statusCode == 429) {
+          throw GeminiException('This key is valid but out of quota: $msg', code: 'GEMINI_QUOTA');
+        }
+        errors.add('$model: $msg');
+      } on GeminiException {
+        rethrow;
+      } catch (e) {
+        errors.add('$model: $e');
+      }
+    }
+    throw GeminiException('No Gemini model answered.\n${errors.join('\n')}',
+        code: 'GEMINI_UNAVAILABLE');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Internals
+  // ---------------------------------------------------------------------------
+  Future<List<Map<String, String>>> _identify(
+    Map<String, dynamic> backendPayload, {
+    required List<Map<String, dynamic>> directParts,
+  }) async {
+    Object? backendFailure;
+
+    // 1) Backend proxy (key stays on the server).
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$backendUrl/api/identify'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode(backendPayload),
+          )
+          .timeout(const Duration(seconds: 100));
+
+      if (res.statusCode == 200) {
+        final body = json.decode(res.body) as Map<String, dynamic>;
+        return _toSongs((body['songs'] as List?) ?? const []);
+      }
+      backendFailure = GeminiException(
+        _googleMessage(res.body),
+        code: _errorCode(res.body),
+        needsKey: _errorCode(res.body) == 'GEMINI_KEY_MISSING',
+      );
+    } catch (e) {
+      backendFailure = GeminiException(
+        'Could not reach the song service. Check your internet connection.',
+        code: 'BACKEND_UNREACHABLE',
+      );
+    }
+
+    // 2) Direct call with a key the user saved in Settings.
+    final key = await localKey();
+    if (key != null) {
+      try {
+        final text = await _generateDirect(key, directParts);
+        return _toSongs(_parseJsonArray(text));
+      } on GeminiException catch (e) {
+        // Prefer the direct error when it is about the user's own key.
+        if (e.code == 'GEMINI_KEY_INVALID' || e.code == 'GEMINI_QUOTA') throw e;
+        backendFailure = e;
+      }
+    }
+
+    if (backendFailure is GeminiException) {
+      final f = backendFailure;
+      if (f.code == 'GEMINI_KEY_MISSING' || f.code == 'BACKEND_UNREACHABLE') {
+        throw const GeminiException(
+          'Song identification needs a Gemini API key. Add one in Settings → '
+          'AI Settings (free at aistudio.google.com/apikey).',
+          code: 'GEMINI_KEY_MISSING',
+          needsKey: true,
+        );
+      }
+      throw f;
+    }
+    throw const GeminiException('Song identification failed. Please try again.',
+        code: 'GEMINI_ERROR');
+  }
+
+  Future<String> _generateDirect(String apiKey, List<Map<String, dynamic>> parts) async {
+    final errors = <String>[];
+    for (final model in _models) {
+      try {
+        final res = await http
+            .post(
+              Uri.parse('$_geminiBase/$model:generateContent'),
+              headers: {'Content-Type': 'application/json', 'x-goog-api-key': apiKey},
+              body: json.encode({
+                'contents': [
+                  {
+                    'role': 'user',
+                    'parts': parts,
+                  },
+                ],
+              }),
+            )
+            .timeout(const Duration(seconds: 90));
+
+        if (res.statusCode == 200) {
+          final body = json.decode(res.body) as Map<String, dynamic>;
+          final text = _extractText(body);
+          if (text.trim().isEmpty) {
+            errors.add('$model: empty response');
+            continue;
+          }
+          return text;
+        }
+
+        final msg = _googleMessage(res.body);
+        if (res.statusCode == 401 || res.statusCode == 403) {
+          throw GeminiException('Google rejected your API key: $msg',
+              code: 'GEMINI_KEY_INVALID');
+        }
+        if (res.statusCode == 429) {
+          throw GeminiException('Gemini quota exceeded for this key: $msg',
+              code: 'GEMINI_QUOTA');
+        }
+        errors.add('$model: $msg');
+      } on GeminiException {
+        rethrow;
+      } catch (e) {
+        errors.add('$model: $e');
+      }
+    }
+    throw GeminiException(
+      'No Gemini model could handle the request.\n${errors.join('\n')}',
+      code: 'GEMINI_UNAVAILABLE',
+    );
+  }
+
+  String _extractText(Map<String, dynamic> data) {
+    final candidates = data['candidates'];
+    if (candidates is List && candidates.isNotEmpty) {
+      final parts = candidates[0]?['content']?['parts'];
+      if (parts is List) {
+        return parts.map((p) => (p?['text'] ?? '').toString()).join();
+      }
+    }
+    final block = data['promptFeedback']?['blockReason'];
+    if (block != null) {
+      throw GeminiException('Gemini blocked the request ($block).',
+          code: 'GEMINI_BLOCKED');
+    }
+    throw GeminiException('Unexpected response from Gemini.', code: 'GEMINI_BAD_RESPONSE');
+  }
+
+  List<dynamic> _parseJsonArray(String raw) {
+    final text = raw.replaceAll(RegExp(r'```(?:json)?', caseSensitive: false), '').trim();
+    final start = text.indexOf('[');
+    final end = text.lastIndexOf(']');
+    if (start == -1 || end == -1 || end <= start) return const [];
+    try {
+      final decoded = json.decode(text.substring(start, end + 1));
+      return decoded is List ? decoded : const [];
+    } catch (_) {
+      return const [];
+    }
   }
 
   List<Map<String, String>> _toSongs(List<dynamic> list) {
-    return list.map((e) => <String, String>{
-          'title': (e is Map && e['title'] != null) ? e['title'].toString() : '',
-          'artist': (e is Map && e['artist'] != null) ? e['artist'].toString() : '',
-        }).toList();
+    final out = <Map<String, String>>[];
+    for (final e in list) {
+      if (e is! Map) continue;
+      final title = (e['title'] ?? e['song'] ?? e['track'] ?? '').toString().trim();
+      final artist = (e['artist'] ?? e['artistName'] ?? '').toString().trim();
+      if (title.isEmpty) continue;
+      out.add({'title': title, 'artist': artist.isEmpty ? 'Unknown artist' : artist});
+      if (out.length == 5) break;
+    }
+    return out;
+  }
+
+  String _errorCode(String body) {
+    try {
+      final map = json.decode(body);
+      if (map is Map && map['code'] != null) return map['code'].toString();
+    } catch (_) {}
+    return 'GEMINI_ERROR';
+  }
+
+  String _googleMessage(String body) {
+    try {
+      final map = json.decode(body);
+      if (map is Map) {
+        if (map['error'] is Map && map['error']['message'] != null) {
+          return map['error']['message'].toString();
+        }
+        if (map['error'] != null) return map['error'].toString();
+        if (map['message'] != null) return map['message'].toString();
+      }
+    } catch (_) {}
+    return body.length > 300 ? '${body.substring(0, 300)}…' : body;
   }
 }

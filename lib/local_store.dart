@@ -25,8 +25,22 @@ class LocalStore {
   Future<void> addSongs(List<Map<String, String>> songs) async {
     final prefs = await SharedPreferences.getInstance();
     final current = await getSavedSongs();
-    final merged = <Map<String, String>>[...current, ...songs];
-    await prefs.setString(_key, json.encode(merged));
+    final seen = <String>{};
+    final merged = <Map<String, String>>[];
+    // Newest first, de-duplicated by title + artist.
+    for (final s in [...songs, ...current]) {
+      final title = (s['title'] ?? '').trim();
+      if (title.isEmpty) continue;
+      final key =
+          '${title.toLowerCase()}|${(s['artist'] ?? '').toLowerCase().trim()}';
+      if (seen.add(key)) merged.add({'title': title, 'artist': s['artist'] ?? ''});
+    }
+    await prefs.setString(_key, json.encode(merged.take(300).toList()));
+  }
+
+  Future<void> clearSongs() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_key);
   }
 
   Future<String> getLastPlaylist() async {

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
-import '../widgets.dart';
 import '../local_store.dart';
 
 class SavedSongsScreen extends StatefulWidget {
@@ -12,7 +11,6 @@ class SavedSongsScreen extends StatefulWidget {
 class _SavedSongsScreenState extends State<SavedSongsScreen> {
   final _store = LocalStore();
   int _tab = 0;
-  bool _overlayOn = true;
   bool _loading = true;
   List<Map<String, String>> _songs = [];
   String _playlist = 'My Playlist';
@@ -206,40 +204,40 @@ class _SavedSongsScreenState extends State<SavedSongsScreen> {
   Widget _overlayCard() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceHigh,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: const BoxDecoration(
-                  color: AppColors.surfaceContainer,
-                  borderRadius: BorderRadius.all(Radius.circular(8))),
-              child: const Icon(Icons.layers, size: 18, color: AppColors.primary),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Instagram Overlay',
-                      style: AppText.titleMedium(AppColors.onSurface)),
-                  Text('Floating nudge over reels',
-                      style: AppText.bodySmall(AppColors.onSurfaceVariant)),
-                ],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => Navigator.pushNamed(context, '/permissions'),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceHigh,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                    color: AppColors.surfaceContainer,
+                    borderRadius: BorderRadius.all(Radius.circular(8))),
+                child: const Icon(Icons.layers, size: 18, color: AppColors.primary),
               ),
-            ),
-            Switch(
-              value: _overlayOn,
-              onChanged: (v) => setState(() => _overlayOn = v),
-              activeColor: AppColors.primaryContainer,
-            ),
-          ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Floating nudge setup',
+                        style: AppText.titleMedium(AppColors.onSurface)),
+                    Text('Overlay permission · manual capture for now',
+                        style: AppText.bodySmall(AppColors.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: AppColors.onSurfaceVariant),
+            ],
+          ),
         ),
       ),
     );
@@ -264,12 +262,15 @@ class _SavedSongsScreenState extends State<SavedSongsScreen> {
             final active = _tab == i;
             return GestureDetector(
               onTap: () {
-                setState(() => _tab = i);
                 if (i == 1) {
                   Navigator.pushNamed(context, '/nudge');
-                } else if (i == 2) {
-                  Navigator.pushNamed(context, '/permissions');
+                  return;
                 }
+                if (i == 2) {
+                  Navigator.pushNamed(context, '/settings');
+                  return;
+                }
+                setState(() => _tab = i);
               },
               child: Column(
                 mainAxisSize: MainAxisSize.min,

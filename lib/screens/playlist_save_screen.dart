@@ -27,11 +27,9 @@ class _PlaylistSaveScreenState extends State<PlaylistSaveScreen> {
   }
 
   Future<void> _init() async {
-    final spotify = await AuthService().tokenFor('spotify');
-    final youtube = await AuthService().tokenFor('google');
-    if (spotify == null || spotify.isEmpty) {
-      if (youtube != null && youtube.isNotEmpty) _provider = 'youtube';
-    }
+    final spotify = await AuthService().isConnected('spotify');
+    final youtube = await AuthService().isConnected('google');
+    if (!spotify && youtube) _provider = 'youtube';
     await _load();
   }
 
@@ -43,7 +41,7 @@ class _PlaylistSaveScreenState extends State<PlaylistSaveScreen> {
       _playlists = [];
     });
     try {
-      final token = await AuthService().tokenFor(
+      final token = await AuthService().freshToken(
           _provider == 'spotify' ? 'spotify' : 'google');
       if (token == null || token.isEmpty) {
         throw Exception('Not connected to $_provider. Go back and connect it.');
@@ -73,11 +71,12 @@ class _PlaylistSaveScreenState extends State<PlaylistSaveScreen> {
       _error = null;
     });
     try {
-      final token = await AuthService().tokenFor(
+      final token = await AuthService().freshToken(
           _provider == 'spotify' ? 'spotify' : 'google');
       if (token == null || token.isEmpty) throw Exception('Missing access token.');
 
       final ids = <String>[];
+      final missingTitles = <String>[];
       for (final song in widget.songs) {
         final title = song['title'] ?? '';
         final artist = song['artist'] ?? '';
@@ -85,10 +84,15 @@ class _PlaylistSaveScreenState extends State<PlaylistSaveScreen> {
         final id = _provider == 'spotify'
             ? await _service.spotifyTrackUri(token, title, artist)
             : await _service.youtubeVideoId(token, title, artist);
-        if (id != null && id.isNotEmpty) ids.add(id);
+        if (id != null && id.isNotEmpty) {
+          ids.add(id);
+        } else {
+          missingTitles.add(title);
+        }
       }
       if (ids.isEmpty) {
-        throw Exception('None of these songs were found on $_provider.');
+        throw Exception(
+            'None of these songs could be found on $_provider. Try another service or a different playlist.');
       }
       if (_provider == 'spotify') {
         await _service.addToSpotify(token, _selectedId!, ids);
@@ -96,7 +100,10 @@ class _PlaylistSaveScreenState extends State<PlaylistSaveScreen> {
         await _service.addToYouTube(token, _selectedId!, ids);
       }
       if (!mounted) return;
-      final name = _playlists.firstWhere((p) => p.id == _selectedId).name;
+      final name = _playlists
+          .firstWhere((p) => p.id == _selectedId,
+              orElse: () => const Playlist(id: '', name: 'your playlist', count: 0))
+          .name;
       Navigator.pushReplacementNamed(
         context,
         '/confirmation',
@@ -104,6 +111,7 @@ class _PlaylistSaveScreenState extends State<PlaylistSaveScreen> {
           'count': ids.length,
           'playlist': name,
           'songs': widget.songs,
+          'missing': missingTitles,
         },
       );
     } catch (e) {
@@ -153,9 +161,45 @@ class _PlaylistSaveScreenState extends State<PlaylistSaveScreen> {
                         child: CircularProgressIndicator(color: AppColors.primary))
                     : _playlists.isEmpty
                         ? Center(
-                            child: Text('No playlists found.',
-                                style: AppText.bodyMedium(
-                                    AppColors.onSurfaceVariant)))
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.playlist_remove,
+                                    size: 48, color: AppColors.onSurfaceVariant),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _error != null
+                                      ? 'Could not load playlists'
+                                      : 'No playlists found',
+                                  style: AppText.titleMedium(AppColors.onSurface),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  _provider == 'spotify'
+                                      ? 'Create a playlist in Spotify, or connect your account again.'
+                                      : 'Create a playlist on YouTube Music, or connect your account again.',
+                                  style: AppText.bodySmall(
+                                      AppColors.onSurfaceVariant),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 16),
+                                Wrap(
+                                  spacing: 10,
+                                  children: [
+                                    OutlinedButton(
+                                      onPressed: _load,
+                                      child: const Text('Retry'),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () => Navigator.pushNamed(
+                                          context, '/connect'),
+                                      child: const Text('Manage connections'),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          )
                         : ListView.builder(
                             itemCount: _playlists.length,
                             itemBuilder: (context, i) {
