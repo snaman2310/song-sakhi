@@ -6,7 +6,7 @@ import 'theme.dart';
 import 'mobile/mobile_login_screen.dart';
 import 'mobile/mobile_connect_screen.dart';
 import 'mobile/mobile_callback_screen.dart';
-import 'mobile/mobile_capture_screen.dart';
+import 'mobile/mobile_listen_screen.dart';
 import 'mobile/mobile_permissions_screen.dart';
 import 'mobile/mobile_settings_screen.dart';
 import 'screens/saved_songs_screen.dart';
@@ -78,9 +78,9 @@ class _MobileAppState extends State<MobileApp> {
         '/permissions': (ctx) => const MobilePermissionsScreen(),
         '/settings': (ctx) => const MobileSettingsScreen(),
         '/home': (ctx) => const SavedSongsScreen(),
-        // "Capture Reel" FAB / Discover tab -> real audio capture flow.
-        '/nudge': (ctx) => const MobileCaptureScreen(),
-        '/capture': (ctx) => const MobileCaptureScreen(),
+        // "Capture Reel" FAB / Discover tab -> live listening screen.
+        '/nudge': (ctx) => const MobileListenScreen(),
+        '/capture': (ctx) => const MobileListenScreen(),
         '/suggestions': (ctx) {
           final args = ModalRoute.of(ctx)?.settings.arguments;
           final songs = args is List<Map<String, String>> ? args : null;

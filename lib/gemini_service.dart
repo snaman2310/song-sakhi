@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -32,9 +34,10 @@ class GeminiService {
   /// Flash model, so this list does not rot when a version is retired.
   static const _models = <String>[
     'gemini-flash-latest',
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-2.5-flash-lite',
+    'gemini-3.5-flash',
+    'gemini-3.0-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.0-flash-lite',
   ];
 
   // ---------------------------------------------------------------------------
@@ -89,6 +92,64 @@ class GeminiService {
       'Return ONLY a JSON array (no prose, no markdown) of up to 5 objects shaped like '
       '[{"title":"Song name","artist":"Artist name"}], most likely first. '
       'If you genuinely cannot identify any song, return [].';
+
+  /// Live-listening path: one short WAV chunk -> the songs found in it.
+  ///
+  /// The backend analyses the chunk with two independent pipelines (Whisper
+  /// lyrics + Gemini audio) and returns the merged list. Each song map has
+  /// `title`, `artist` and `via` ("lyrics", "audio" or "lyrics+audio").
+  Future<List<Map<String, String>>> identifyChunk(Uint8List wav) async {
+    final http.Response res;
+    try {
+      res = await http
+          .post(
+            Uri.parse('$backendUrl/api/identify-chunk'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'audioBase64': base64Encode(wav),
+              'mimeType': 'audio/wav',
+            }),
+          )
+          .timeout(const Duration(seconds: 60));
+    } on TimeoutException {
+      throw const GeminiException(
+        'The server took too long to answer. It may be waking up.',
+        code: 'BACKEND_TIMEOUT',
+      );
+    } catch (_) {
+      throw const GeminiException(
+        'Could not reach the server. Check your connection.',
+        code: 'BACKEND_UNREACHABLE',
+      );
+    }
+    if (res.statusCode != 200) throw _backendException(res);
+
+    final body = json.decode(res.body) as Map<String, dynamic>;
+    final out = <Map<String, String>>[];
+    for (final e in (body['songs'] as List?) ?? const []) {
+      if (e is! Map) continue;
+      final title = (e['title'] ?? '').toString().trim();
+      if (title.isEmpty) continue;
+      final artist = (e['artist'] ?? '').toString().trim();
+      final via = e['via'] is List ? (e['via'] as List).join('+') : '';
+      out.add({
+        'title': title,
+        'artist': artist.isEmpty ? 'Unknown artist' : artist,
+        'via': via,
+      });
+    }
+    return out;
+  }
+
+  /// Render's free tier sleeps when idle and takes up to a minute to wake.
+  /// Calling this when the listen screen opens wakes it before the first chunk.
+  Future<void> warmUp() async {
+    try {
+      await http
+          .get(Uri.parse('$backendUrl/health'))
+          .timeout(const Duration(seconds: 60));
+    } catch (_) {}
+  }
 
   /// Verifies a key against Google and returns the model that answered.
   /// The key is treated as an opaque string — we validate it by receiving a
@@ -153,7 +214,10 @@ class GeminiService {
     Map<String, dynamic> backendPayload, {
     required List<Map<String, dynamic>> directParts,
   }) async {
-    // 1) Backend proxy (key stays on the server).
+    // 1) Backend proxy (key stays on the server). Keep the real reason when it
+    //    fails, so a busy model or a sleeping server is not reported as a
+    //    missing API key.
+    GeminiException? backendError;
     try {
       final res = await http
           .post(
@@ -167,8 +231,17 @@ class GeminiService {
         final body = json.decode(res.body) as Map<String, dynamic>;
         return _toSongs((body['songs'] as List?) ?? const []);
       }
+      backendError = _backendException(res);
+    } on TimeoutException {
+      backendError = const GeminiException(
+        'The server took too long to answer. It may be waking up, so try again in a moment.',
+        code: 'BACKEND_TIMEOUT',
+      );
     } catch (_) {
-      // fall through to direct key below
+      backendError = const GeminiException(
+        'Could not reach the server. Check your connection and try again.',
+        code: 'BACKEND_UNREACHABLE',
+      );
     }
 
     // 2) Direct call with a key the user saved in Settings.
@@ -182,12 +255,28 @@ class GeminiService {
       }
     }
 
-    throw const GeminiException(
-      'Song identification needs a Gemini API key. Add one in Settings → '
-      'AI Settings (free at aistudio.google.com/apikey).',
-      code: 'GEMINI_KEY_MISSING',
-      needsKey: true,
-    );
+    throw backendError ??
+        const GeminiException(
+          'Song identification needs a Gemini API key. Add one in Settings → '
+          'AI Settings (free at aistudio.google.com/apikey).',
+          code: 'GEMINI_KEY_MISSING',
+          needsKey: true,
+        );
+  }
+
+  /// Turns an error response from our backend into a [GeminiException].
+  GeminiException _backendException(http.Response res) {
+    var message = 'Server error (${res.statusCode}).';
+    var code = 'BACKEND_ERROR';
+    try {
+      final map = json.decode(res.body);
+      if (map is Map) {
+        if (map['error'] != null) message = map['error'].toString();
+        if (map['code'] != null) code = map['code'].toString();
+      }
+    } catch (_) {}
+    return GeminiException(message,
+        code: code, needsKey: code == 'GEMINI_KEY_MISSING');
   }
 
   Future<String> _generateDirect(String apiKey, List<Map<String, dynamic>> parts) async {

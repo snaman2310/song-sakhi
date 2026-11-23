@@ -36,7 +36,10 @@ class PlaylistService {
   }
 
   Future<String?> spotifyTrackUri(String token, String title, String artist) async {
-    final q = Uri.encodeComponent('track:"$title" artist:"$artist"');
+    // Double quotes inside a title/artist would break the quoted field filters.
+    final t = title.replaceAll('"', '');
+    final a = artist.replaceAll('"', '');
+    final q = Uri.encodeComponent('track:"$t" artist:"$a"');
     final r = await http.get(
       Uri.parse('$_spotify/search?q=$q&type=track&limit=1'),
       headers: _auth(token),
