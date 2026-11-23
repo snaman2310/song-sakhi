@@ -57,11 +57,13 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 // "gemini-flash-latest" is a stable alias Google keeps pointed at the newest
 // Flash model, so this list does not go stale when a version is retired.
 // Order matters: we try the stable alias first, then other Flash models.
+// New model names (3.x-series) replaced the retired 2.x-series models.
 const GEMINI_MODELS = [
   'gemini-flash-latest',
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-2.5-flash-lite',
+  'gemini-3.5-flash',
+  'gemini-3.0-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.0-flash-lite',
   process.env.GEMINI_MODEL,
 ].filter(Boolean);
 
