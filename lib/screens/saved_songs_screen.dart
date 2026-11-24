@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../local_store.dart';
+import '../mobile/nudge_controller.dart';
 
 class SavedSongsScreen extends StatefulWidget {
   const SavedSongsScreen({super.key});
@@ -201,19 +202,31 @@ class _SavedSongsScreenState extends State<SavedSongsScreen> {
     );
   }
 
+  Future<void> _toggleNudge(bool on) async {
+    final ctrl = NudgeController.instance;
+    if (!on) {
+      await ctrl.disable();
+      return;
+    }
+    final err = await ctrl.enable();
+    if (err != null && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(err)));
+    }
+  }
+
   Widget _overlayCard() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => Navigator.pushNamed(context, '/permissions'),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceHigh,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceHigh,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: ValueListenableBuilder<bool>(
+          valueListenable: NudgeController.instance.enabled,
+          builder: (context, on, _) => Row(
             children: [
               Container(
                 width: 36,
@@ -225,17 +238,23 @@ class _SavedSongsScreenState extends State<SavedSongsScreen> {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Floating nudge setup',
-                        style: AppText.titleMedium(AppColors.onSurface)),
-                    Text('Overlay permission · manual capture for now',
-                        style: AppText.bodySmall(AppColors.onSurfaceVariant)),
-                  ],
+                child: InkWell(
+                  onTap: () => Navigator.pushNamed(context, '/permissions'),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Floating nudge',
+                          style: AppText.titleMedium(AppColors.onSurface)),
+                      Text(
+                          on
+                              ? 'On · open Instagram and tap the circle'
+                              : 'Off · turn on to float over Instagram',
+                          style: AppText.bodySmall(AppColors.onSurfaceVariant)),
+                    ],
+                  ),
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.onSurfaceVariant),
+              Switch(value: on, onChanged: _toggleNudge),
             ],
           ),
         ),

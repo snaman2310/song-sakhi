@@ -33,6 +33,17 @@ jobs:
       - name: Install custom AndroidManifest (deep link + mic permission)
         run: cp deploy/android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
 
+      - name: Install native screen-capture module (Kotlin)
+        run: |
+          MAIN=$(find android/app/src/main -name MainActivity.kt | head -n 1)
+          test -n "$MAIN" || { echo "MainActivity.kt not found in generated scaffold"; exit 1; }
+          PKG_DIR=$(dirname "$MAIN")
+          PKG=$(grep -m1 '^package ' "$MAIN" | awk '{print $2}')
+          echo "Generated package: $PKG in $PKG_DIR"
+          cp deploy/android/kotlin/*.kt "$PKG_DIR"/
+          sed -i "s/^package .*/package $PKG/" "$PKG_DIR"/MainActivity.kt "$PKG_DIR"/CaptureService.kt
+          head -n 1 "$PKG_DIR"/MainActivity.kt "$PKG_DIR"/CaptureService.kt
+
       - name: Bump compileSdk to 37 (required by permission_handler_android)
         run: |
           sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*flutter\.compileSdkVersion/compileSdk = 37/' android/app/build.gradle.kts
@@ -43,7 +54,8 @@ jobs:
         run: flutter pub get
 
       - name: Build APK
-        run: flutter build apk --release --target lib/main_mobile.dart
+        # --no-shrink: ML Kit's optional script classes make R8 fail on a release build
+        run: flutter build apk --release --no-shrink --target lib/main_mobile.dart
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

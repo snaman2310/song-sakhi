@@ -18,6 +18,9 @@ dependencies:
   path_provider: ^2.1.2
   url_launcher: ^6.2.2
   app_links: ^6.4.1
+  # Floating nudge: overlay window over other apps + on-device OCR of reel text
+  flutter_overlay_window: ^1.0.2
+  google_mlkit_text_recognition: ">=0.13.0 <2.0.0"
 
 dev_dependencies:
   flutter_test:

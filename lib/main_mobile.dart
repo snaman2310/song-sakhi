@@ -7,12 +7,20 @@ import 'mobile/mobile_login_screen.dart';
 import 'mobile/mobile_connect_screen.dart';
 import 'mobile/mobile_callback_screen.dart';
 import 'mobile/mobile_listen_screen.dart';
+import 'mobile/nudge_overlay.dart';
 import 'mobile/mobile_permissions_screen.dart';
 import 'mobile/mobile_settings_screen.dart';
 import 'screens/saved_songs_screen.dart';
 import 'screens/song_selection_screen.dart';
 import 'screens/playlist_save_screen.dart';
 import 'screens/confirmation_screen.dart';
+
+/// Entry point of the floating overlay engine (flutter_overlay_window).
+@pragma('vm:entry-point')
+void overlayMain() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const NudgeOverlayApp());
+}
 
 final _linkController = StreamController<Uri>.broadcast();
 

@@ -141,6 +141,47 @@ class GeminiService {
     return out;
   }
 
+  /// Songs written on screen (OCR text lines from the reel). Each song map has
+  /// `title`, `artist` and `via` = "screen".
+  Future<List<Map<String, String>>> identifyScreenText(List<String> lines) async {
+    if (lines.isEmpty) return const [];
+    final http.Response res;
+    try {
+      res = await http
+          .post(
+            Uri.parse('$backendUrl/api/identify-text'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({'lines': lines}),
+          )
+          .timeout(const Duration(seconds: 45));
+    } on TimeoutException {
+      throw const GeminiException(
+        'Reading the screen text took too long.',
+        code: 'BACKEND_TIMEOUT',
+      );
+    } catch (_) {
+      throw const GeminiException(
+        'Could not reach the server. Check your connection.',
+        code: 'BACKEND_UNREACHABLE',
+      );
+    }
+    if (res.statusCode != 200) throw _backendException(res);
+
+    final body = json.decode(res.body) as Map<String, dynamic>;
+    final out = <Map<String, String>>[];
+    for (final e in (body['songs'] as List?) ?? const []) {
+      if (e is! Map) continue;
+      final title = (e['title'] ?? '').toString().trim();
+      if (title.isEmpty) continue;
+      out.add({
+        'title': title,
+        'artist': (e['artist'] ?? '').toString().trim(),
+        'via': 'screen',
+      });
+    }
+    return out;
+  }
+
   /// Render's free tier sleeps when idle and takes up to a minute to wake.
   /// Calling this when the listen screen opens wakes it before the first chunk.
   Future<void> warmUp() async {

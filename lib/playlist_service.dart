@@ -35,20 +35,31 @@ class PlaylistService {
         )).toList();
   }
 
+  static bool _hasArtist(String artist) {
+    final a = artist.trim().toLowerCase();
+    return a.isNotEmpty && !a.startsWith('unknown');
+  }
+
   Future<String?> spotifyTrackUri(String token, String title, String artist) async {
     // Double quotes inside a title/artist would break the quoted field filters.
     final t = title.replaceAll('"', '');
     final a = artist.replaceAll('"', '');
-    final q = Uri.encodeComponent('track:"$t" artist:"$a"');
-    final r = await http.get(
-      Uri.parse('$_spotify/search?q=$q&type=track&limit=1'),
-      headers: _auth(token),
-    );
-    if (r.statusCode != 200) return null;
-    final data = json.decode(r.body) as Map<String, dynamic>;
-    final items = (((data['tracks'] as Map?)?['items']) as List?) ?? const [];
-    if (items.isEmpty) return null;
-    return items[0]['uri']?.toString();
+    final strict = _hasArtist(a) ? 'track:"$t" artist:"$a"' : 'track:"$t"';
+
+    // 1) Exact field search, 2) looser free-text search (OCR typos, odd artist
+    //    spellings, "feat." variants).
+    final queries = <String>[strict, _hasArtist(a) ? '$t $a' : t];
+    for (final raw in queries) {
+      final r = await http.get(
+        Uri.parse('$_spotify/search?q=${Uri.encodeComponent(raw)}&type=track&limit=1'),
+        headers: _auth(token),
+      );
+      if (r.statusCode != 200) continue;
+      final data = json.decode(r.body) as Map<String, dynamic>;
+      final items = (((data['tracks'] as Map?)?['items']) as List?) ?? const [];
+      if (items.isNotEmpty) return items[0]['uri']?.toString();
+    }
+    return null;
   }
 
   Future<void> addToSpotify(
@@ -86,7 +97,8 @@ class PlaylistService {
   }
 
   Future<String?> youtubeVideoId(String token, String title, String artist) async {
-    final q = Uri.encodeComponent('$title $artist official audio');
+    final q = Uri.encodeComponent(
+        '$title ${_hasArtist(artist) ? artist : ''} official audio'.replaceAll('  ', ' '));
     final r = await http.get(
       Uri.parse('$_youtube/search?part=snippet&type=video&maxResults=1&q=$q'),
       headers: _auth(token),

@@ -390,7 +390,7 @@ function cleanTitle(title) {
     .trim();
 }
 
-function parseSongs(text) {
+function parseSongs(text, limit = 5) {
   const cleaned = String(text).replace(/```(?:json)?/gi, '').trim();
   const start = cleaned.indexOf('[');
   const end = cleaned.lastIndexOf(']');
@@ -409,7 +409,7 @@ function parseSongs(text) {
       artist: String(s.artist ?? s.artistName ?? '').trim(),
     }))
     .filter((s) => s.title)
-    .slice(0, 5);
+    .slice(0, limit);
 }
 
 const SONG_PROMPT =
@@ -682,7 +682,7 @@ const rateBuckets = new Map();
 function rateLimit(max, windowMs) {
   return (req, res, next) => {
     const now = Date.now();
-    const key = req.ip || 'unknown';
+    const key = `${req.path}|${req.ip || 'unknown'}`;
     const b = rateBuckets.get(key);
     if (!b || now - b.start > windowMs) {
       rateBuckets.set(key, { start: now, count: 1 });
@@ -736,6 +736,53 @@ app.post('/api/identify-chunk', rateLimit(40, 60 * 1000), async (req, res) => {
     res.status(err.status || 502).json({ error: err.message, code: err.code || 'CHUNK_ERROR' });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Reading the screen: /api/identify-text
+//
+// Many "songs you need to hear" reels print each song's title on screen. The
+// app grabs frames while listening, reads the text on-device (ML Kit OCR) and
+// sends only the new text lines here. Text is the strongest evidence we have
+// (it is what the creator typed), so these songs outrank audio guesses.
+// ---------------------------------------------------------------------------
+const SONG_PROMPT_SCREEN =
+  'You read text captured from a phone screen (OCR output, may be noisy) while someone ' +
+  'watches an Instagram reel. Reels that recommend music usually show each song title, ' +
+  'often with the artist, as on-screen text, numbered or one after another. The label at ' +
+  'the bottom of a reel may read like "Artist - Song name" or "Song name - Artist". ' +
+  'Extract ONLY songs that are actually written in the text. ' +
+  'Ignore usernames, captions, hashtags, comments, buttons (Follow, Like, Comment, Share, ' +
+  'Reply), counts, timestamps, ads and any other app UI. ' +
+  'Do not invent songs that are not in the text. Fix obvious OCR typos in titles. ' +
+  'If the artist is not shown, give the artist only when you are certain, otherwise use "". ' +
+  'Return ONLY a JSON array (no prose, no markdown) of up to 12 objects shaped like ' +
+  '[{"title":"Song name","artist":"Artist name"}] in the order they appear. ' +
+  'If the text names no songs, return [].';
+
+app.post('/api/identify-text', rateLimit(30, 60 * 1000), async (req, res) => {
+  try {
+    const raw = Array.isArray(req.body?.lines) ? req.body.lines : [];
+    const lines = raw
+      .map((l) => String(l ?? '').trim())
+      .filter((l) => l.length >= 2 && l.length <= 160)
+      .slice(0, 150);
+    if (lines.length === 0) {
+      return res.status(400).json({ error: 'Provide a non-empty lines array.', code: 'BAD_REQUEST' });
+    }
+    let text = lines.join('\n');
+    if (text.length > 6000) text = text.slice(0, 6000);
+
+    const { text: answer } = await callGemini([
+      { text: `${SONG_PROMPT_SCREEN}\n\nScreen text:\n${text}` },
+    ]);
+    const songs = parseSongs(answer, 12).map((s) => ({ ...s, via: ['screen'] }));
+    res.json({ songs });
+  } catch (err) {
+    console.error('[identify-text]', err.code || '', err.message);
+    res.status(err.status || 502).json({ error: err.message, code: err.code || 'TEXT_ERROR' });
+  }
+});
+
 
 app.listen(PORT, () => {
   console.log(`song-sakhi-auth listening on ${PORT}`);
