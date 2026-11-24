@@ -20,6 +20,8 @@ class MainActivity : FlutterActivity() {
         private const val REQ_CAPTURE = 7421
     }
 
+    private var resumed = false
+    private var askedInBackground = false
     private var channel: MethodChannel? = null
     private var pendingResult: MethodChannel.Result? = null
 
@@ -39,6 +41,10 @@ class MainActivity : FlutterActivity() {
                     CaptureService.startMicOnly(applicationContext) { ok ->
                         runOnUiThread { result.success(ok) }
                     }
+                }
+                "stopProjection" -> {
+                    CaptureService.stopProjection()
+                    result.success(true)
                 }
                 "stop" -> {
                     CaptureService.stop(applicationContext)
@@ -65,6 +71,7 @@ class MainActivity : FlutterActivity() {
             return
         }
         pendingResult = result
+        askedInBackground = !resumed
         val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         @Suppress("DEPRECATION")
         startActivityForResult(mpm.createScreenCaptureIntent(), REQ_CAPTURE)
@@ -78,6 +85,8 @@ class MainActivity : FlutterActivity() {
         }
         val result = pendingResult
         pendingResult = null
+        val goBack = askedInBackground
+        askedInBackground = false
         if (resultCode == Activity.RESULT_OK && data != null) {
             CaptureService.startCapture(applicationContext, resultCode, data) { ok ->
                 runOnUiThread { result?.success(ok) }
@@ -85,6 +94,18 @@ class MainActivity : FlutterActivity() {
         } else {
             result?.success(false)
         }
+        // The nudge asked from inside Instagram: send the user straight back to it.
+        if (goBack) moveTaskToBack(true)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        resumed = true
+    }
+
+    override fun onPause() {
+        resumed = false
+        super.onPause()
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {

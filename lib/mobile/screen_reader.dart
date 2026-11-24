@@ -53,6 +53,13 @@ class ScreenCapture {
     }
   }
 
+  /// Ends screen sharing but keeps the background-mic service alive.
+  static Future<void> stopProjection() async {
+    try {
+      await _channel.invokeMethod<bool>('stopProjection');
+    } on PlatformException catch (_) {}
+  }
+
   static Future<void> stop() async {
     try {
       await _channel.invokeMethod<bool>('stop');

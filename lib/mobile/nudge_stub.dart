@@ -8,6 +8,7 @@ class NudgeController {
 
   final ValueNotifier<bool> enabled = ValueNotifier<bool>(false);
 
+  Future<void> syncOnStart() async {}
   Future<String?> enable() async => 'The floating nudge only works in the Android app.';
   Future<void> disable() async {}
 }

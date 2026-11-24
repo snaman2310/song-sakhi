@@ -95,6 +95,11 @@ class CaptureService : Service() {
             }
         }
 
+        /** Ends screen sharing only; the foreground service (mic) keeps running. */
+        fun stopProjection() {
+            instance?.endProjection()
+        }
+
         fun stop(ctx: Context) {
             ctx.stopService(Intent(ctx, CaptureService::class.java))
         }
@@ -183,7 +188,18 @@ class CaptureService : Service() {
                     Log.e(TAG, "No foreground type available (mic permission missing)")
                     return false
                 }
-                startForeground(NOTIF_ID, notification, type)
+                try {
+                    startForeground(NOTIF_ID, notification, type)
+                } catch (e: Exception) {
+                    // Mic type can be refused when upgrading from the background.
+                    val projOnly = type and ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE.inv()
+                    if (withProjection && projOnly != 0) {
+                        Log.w(TAG, "Retrying foreground with projection type only", e)
+                        startForeground(NOTIF_ID, notification, projOnly)
+                    } else {
+                        throw e
+                    }
+                }
             } else {
                 startForeground(NOTIF_ID, notification)
             }
@@ -241,6 +257,7 @@ class CaptureService : Service() {
     }
 
     private fun beginProjection(code: Int, data: Intent): Boolean {
+        closed.set(false)
         val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         val proj = mpm.getMediaProjection(code, data) ?: return false
 
@@ -253,6 +270,8 @@ class CaptureService : Service() {
         proj.registerCallback(object : MediaProjection.Callback() {
             override fun onStop() {
                 h.post {
+                    // We ended it ourselves (teardown already ran): nothing to do.
+                    if (closed.get()) return@post
                     teardown()
                     onStopped?.invoke()
                     stopSelf()
@@ -357,6 +376,12 @@ class CaptureService : Service() {
     private fun failStart() {
         deliverStart(false)
         stopSelf()
+    }
+
+    /** Drops the projection but stays a microphone foreground service. */
+    private fun endProjection() {
+        teardown()
+        enterForeground(withProjection = false)
     }
 
     private fun teardown() {

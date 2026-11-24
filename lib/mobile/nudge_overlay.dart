@@ -99,16 +99,35 @@ class _OverlayHomeState extends State<_OverlayHome>
 
   // ---------------------------------------------------------------------------
 
+  double _lw = 0;
+
+  // Tell the main isolate how big this window really is (in dp) so it can
+  // correct the size units used when resizing.
+  void _reportSize(double w, double h) {
+    if ((w - _lw).abs() < 1) return;
+    _lw = w;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _send({'a': 'size', 'w': w, 'h': h});
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, c) {
+      _reportSize(c.maxWidth, c.maxHeight);
+      return _content(c);
+    });
+  }
+
+  Widget _content(BoxConstraints c) {
     if (_compact) {
-      // Nudge 1: just the circle.
-      return Align(
-        alignment: Alignment.center,
+      // Nudge 1: just the circle, filling its window.
+      final d = (math.min(c.maxWidth, c.maxHeight) - 4).clamp(24.0, 300.0).toDouble();
+      return Center(
         child: _BeatsCircle(
           anim: _beats,
           active: _phase == 'listening' || _phase == 'finishing',
-          size: 56,
+          size: d,
           onTap: () => _send({'a': 'tap'}),
         ),
       );
@@ -144,7 +163,7 @@ class _OverlayHomeState extends State<_OverlayHome>
     switch (_phase) {
       case 'listening':
         title = 'Listening… ${elapsed}s / ${max}s';
-        sub = 'Tap the circle to stop';
+        sub = _s['screenOn'] == true ? 'Hearing + reading screen · tap to stop' : 'Tap the circle to stop';
       case 'finishing':
         title = 'Finishing up…';
         sub = 'Checking the last bit';

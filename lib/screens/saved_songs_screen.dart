@@ -20,6 +20,7 @@ class _SavedSongsScreenState extends State<SavedSongsScreen> {
   void initState() {
     super.initState();
     _load();
+    NudgeController.instance.syncOnStart();
   }
 
   Future<void> _load() async {

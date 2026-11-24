@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
@@ -56,7 +57,8 @@ class NudgeController {
   NudgeController._();
   static final NudgeController instance = NudgeController._();
 
-  static const int _overlayWidth = 300;
+  static const int _overlayWidth = 300; // dp
+  static const int _circleDp = 68; // the floating circle, ~3x the first version
 
   /// True while the floating circle is shown.
   final ValueNotifier<bool> enabled = ValueNotifier<bool>(false);
@@ -89,14 +91,41 @@ class NudgeController {
   final Set<String> _lineSeen = {};
   final List<String> _pendingLines = [];
 
-  int _lastW = 0;
-  int _lastH = 0;
+  // Wanted overlay size in dp, and the multiplier that turns it into whatever
+  // unit the overlay plugin's resizeOverlay really uses (calibrated from the
+  // size the overlay reports back).
+  int _wantW = 0;
+  int _wantH = 0;
+  double _unit = 1.0;
+  int _calib = 0;
+  bool _screenAsked = false;
+  bool _usedScreen = false;
 
   // ------------------------------------------------------------------------
   // Turning the nudge on / off (called from the Home screen)
   // ------------------------------------------------------------------------
 
   /// Returns null on success, otherwise a message to show the user.
+  double get dpr {
+    try {
+      return ui.PlatformDispatcher.instance.views.first.devicePixelRatio;
+    } catch (_) {
+      return 2.75;
+    }
+  }
+
+  /// Call when the Home screen opens: an overlay left over from a previous run
+  /// has nobody listening to it, so its taps would do nothing. Close it.
+  Future<void> syncOnStart() async {
+    if (enabled.value) return;
+    try {
+      if (await FlutterOverlayWindow.isActive()) {
+        await FlutterOverlayWindow.closeOverlay();
+      }
+    } catch (_) {}
+    await ScreenCapture.stop();
+  }
+
   Future<String?> enable() async {
     if (enabled.value) return null;
 
@@ -114,20 +143,17 @@ class NudgeController {
     }
     await Permission.notification.request(); // optional, only for the status notice
 
-    // Screen reading (OCR). If declined we still start the background mic
-    // service, because the nudge must keep hearing audio inside Instagram.
-    _screenOn = await ScreenCapture.start();
-    if (!_screenOn) {
-      final micService = await ScreenCapture.startMicOnly();
-      if (!micService) {
-        return 'Could not start the background listener. Check notification and microphone permissions.';
-      }
+    // Background-mic service only. Screen sharing is asked for per reel, when
+    // the user taps the circle, and released when listening ends.
+    final micService = await ScreenCapture.startMicOnly();
+    if (!micService) {
+      return 'Could not start the background listener. Check notification and microphone permissions.';
     }
 
     try {
       await FlutterOverlayWindow.showOverlay(
-        height: 64,
-        width: 64,
+        height: (_circleDp * dpr).round(),
+        width: (_circleDp * dpr).round(),
         alignment: OverlayAlignment.centerRight,
         enableDrag: true,
         overlayTitle: 'Song Sakhi nudge',
@@ -138,20 +164,22 @@ class NudgeController {
       return 'Could not show the floating nudge: $e';
     }
 
-    _lastW = 64;
-    _lastH = 64;
+    _wantW = _circleDp;
+    _wantH = _circleDp;
+    _calib = 0;
     _overlaySub = FlutterOverlayWindow.overlayListener.listen(_onOverlayMessage);
     _captureStopSub = ScreenCapture.stopped.listen((_) {
+      // Sharing was ended from outside (status bar chip / system).
       _screenOn = false;
-      _message = 'Screen reading stopped. Turn the nudge off and on to bring it back.';
+      _ocrTimer?.cancel();
+      _ocrTimer = null;
+      _ocrDone = true;
+      if (_phase == NudgePhase.listening) _message = 'Screen sharing stopped, using audio only.';
       _push();
     });
 
     _resetToIdle();
     enabled.value = true;
-    if (!_screenOn) {
-      _message = 'Screen reading is off, so only audio is used.';
-    }
     _push();
     return null;
   }
@@ -168,6 +196,8 @@ class NudgeController {
     } catch (_) {}
     await ScreenCapture.stop();
     _screenOn = false;
+    _wantW = 0;
+    _wantH = 0;
     _resetToIdle();
     enabled.value = false;
   }
@@ -188,8 +218,11 @@ class NudgeController {
     // State messages we sent ourselves have no 'a' key and are ignored here.
     switch (m['a']) {
       case 'ready':
-        _lastW = 0; // force a resize + state push for a freshly started overlay
+        _wantW = 0; // force a resize + state push for a freshly started overlay
         _push();
+      case 'size':
+        final w = m['w'];
+        if (w is num) _onOverlaySize(w.toDouble());
       case 'tap':
         _onCircleTap();
       case 'toggle':
@@ -265,7 +298,10 @@ class NudgeController {
     _message = null;
     _savedLabel = null;
     _audioDone = false;
-    _ocrDone = !_screenOn;
+    _ocrDone = true; // flips to false only once screen sharing is granted
+    _screenOn = false;
+    _screenAsked = false;
+    _usedScreen = false;
     _phase = NudgePhase.listening;
     _push();
 
@@ -314,10 +350,32 @@ class NudgeController {
       return;
     }
 
-    if (_screenOn) {
-      _lastFlush = DateTime.now();
-      _ocrTimer = Timer.periodic(const Duration(seconds: 2), (_) => _ocrTick());
+    // Audio is already running. Now ask for the screen (OCR) for this reel only.
+    unawaited(_beginScreen(id));
+  }
+
+  Future<void> _beginScreen(int id) async {
+    _screenAsked = true;
+    _message = 'Allow screen sharing to also read the song text on the reel.';
+    _push();
+    final granted = await ScreenCapture.start();
+    if (id != _session || _phase != NudgePhase.listening) {
+      // Listening already ended while the dialog was open.
+      if (granted) await ScreenCapture.stopProjection();
+      return;
     }
+    _message = null;
+    if (!granted) {
+      _message = 'Screen reading skipped, using audio only.';
+      _push();
+      return;
+    }
+    _screenOn = true;
+    _usedScreen = true;
+    _ocrDone = false;
+    _lastFlush = DateTime.now();
+    _ocrTimer = Timer.periodic(const Duration(seconds: 2), (_) => _ocrTick());
+    _push();
   }
 
   Future<void> _stopSession() async {
@@ -340,6 +398,9 @@ class NudgeController {
     }
     if (id != _session) return;
     _ocrDone = true;
+    // Screen sharing only lives for the length of one reel.
+    if (_screenAsked) await ScreenCapture.stopProjection();
+    _screenOn = false;
     _maybeFinish();
   }
 
@@ -347,6 +408,11 @@ class NudgeController {
     _session++; // invalidates every callback of the old session
     _ocrTimer?.cancel();
     _ocrTimer = null;
+    if (_screenAsked) {
+      _screenAsked = false;
+      _screenOn = false;
+      unawaited(ScreenCapture.stopProjection());
+    }
     final l = _listener;
     _listener = null;
     if (l != null) {
@@ -366,6 +432,11 @@ class NudgeController {
       ..clear()
       ..addAll(trusted)
       ..addAll(rest);
+    if (_usedScreen) {
+      for (final s in _songs) {
+        if (!s.trusted && !s.touched) s.selected = false;
+      }
+    }
     _phase = NudgePhase.selecting;
     if (_songs.isEmpty) {
       _message = 'No song found. Tap the circle to try again.';
@@ -590,9 +661,9 @@ class NudgeController {
     final n = _songs.length;
     final p = _playlistList.length;
     return switch (_phase) {
-      NudgePhase.idle => (w: 64, h: 64, compact: true),
+      NudgePhase.idle => (w: _circleDp, h: _circleDp, compact: true),
       NudgePhase.listening || NudgePhase.finishing => n == 0
-          ? (w: 64, h: 64, compact: true)
+          ? (w: _circleDp, h: _circleDp, compact: true)
           : (w: _overlayWidth, h: (120 + n * 58).clamp(180, 440).toInt(), compact: false),
       NudgePhase.selecting => (
           w: _overlayWidth,
@@ -641,14 +712,31 @@ class NudgeController {
   Future<void> _syncOverlay() async {
     final l = _layout();
     try {
-      if (l.w != _lastW || l.h != _lastH) {
-        _lastW = l.w;
-        _lastH = l.h;
-        await FlutterOverlayWindow.resizeOverlay(l.w, l.h, true);
+      if (l.w != _wantW || l.h != _wantH) {
+        _wantW = l.w;
+        _wantH = l.h;
+        _calib = 0;
+        await _resize();
       }
       await FlutterOverlayWindow.shareData(jsonEncode(_stateJson(l.compact)));
     } catch (e) {
       debugPrint('Overlay sync failed: $e');
     }
+  }
+
+  Future<void> _resize() async {
+    await FlutterOverlayWindow.resizeOverlay(
+        (_wantW * _unit).round(), (_wantH * _unit).round(), true);
+  }
+
+  /// The overlay tells us how wide it really is (in dp). If that differs from
+  /// what we asked for, the plugin uses another unit: correct and resize once.
+  void _onOverlaySize(double w) {
+    if (_wantW == 0 || w <= 0 || _calib >= 2) return;
+    final ratio = w / _wantW;
+    if ((ratio - 1).abs() < 0.12) return;
+    _unit = (_unit / ratio).clamp(0.2, 8.0).toDouble();
+    _calib++;
+    _resize();
   }
 }
