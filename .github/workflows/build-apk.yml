@@ -50,6 +50,11 @@ jobs:
           sed -i -E 's/compileSdk[[:space:]]*flutter\.compileSdkVersion/compileSdk 37/' android/app/build.gradle.kts
           grep -n "compileSdk" android/app/build.gradle.kts
 
+      - name: Turn off R8 minify (ML Kit optional script classes break it)
+        run: |
+          sed -i -E '0,/release[[:space:]]*\{/s//release {\n            isMinifyEnabled = false\n            isShrinkResources = false/' android/app/build.gradle.kts
+          sed -n '/buildTypes/,/^    }/p' android/app/build.gradle.kts
+
       - name: Get packages
         run: flutter pub get
 
