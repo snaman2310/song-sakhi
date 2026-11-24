@@ -644,7 +644,7 @@ class NudgeController {
       if (l.w != _lastW || l.h != _lastH) {
         _lastW = l.w;
         _lastH = l.h;
-        await FlutterOverlayWindow.resizeOverlay(l.w, l.h);
+        await FlutterOverlayWindow.resizeOverlay(l.w, l.h, true);
       }
       await FlutterOverlayWindow.shareData(jsonEncode(_stateJson(l.compact)));
     } catch (e) {

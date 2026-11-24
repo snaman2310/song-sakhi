@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../local_store.dart';
-import '../mobile/nudge_controller.dart';
+import '../mobile/nudge_gate.dart';
 
 class SavedSongsScreen extends StatefulWidget {
   const SavedSongsScreen({super.key});
