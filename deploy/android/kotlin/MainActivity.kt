@@ -66,10 +66,9 @@ class MainActivity : FlutterActivity() {
             result.success(true)
             return
         }
-        if (pendingResult != null) {
-            result.error("BUSY", "A screen capture request is already open.", null)
-            return
-        }
+        // A previous request that never came back (dialog blocked) must not jam this one.
+        pendingResult?.success(false)
+        pendingResult = null
         pendingResult = result
         askedInBackground = !resumed
         val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager

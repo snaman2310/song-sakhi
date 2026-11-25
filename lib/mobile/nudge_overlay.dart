@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import 'nudge_link.dart';
 
 // The overlay runs in its own Flutter engine, so it deliberately uses no
 // plugins and no app theme: it only renders the JSON state it receives from
@@ -62,15 +62,27 @@ class _OverlayHomeState extends State<_OverlayHome>
     ];
   }
 
+  late final NudgeClient _link;
+  bool _linked = false;
+
   @override
   void initState() {
     super.initState();
-    FlutterOverlayWindow.overlayListener.listen(_onData);
-    _send({'a': 'ready'});
+    _link = NudgeClient(
+      onMessage: _onData,
+      onLink: (ok) {
+        if (mounted) setState(() => _linked = ok);
+        if (ok) {
+          _send({'a': 'ready'});
+          if (_lw > 0) _send({'a': 'size', 'w': _lw, 'h': 0});
+        }
+      },
+    )..start();
   }
 
   @override
   void dispose() {
+    _link.close();
     _beats.dispose();
     super.dispose();
   }
@@ -92,9 +104,7 @@ class _OverlayHomeState extends State<_OverlayHome>
   }
 
   void _send(Map<String, dynamic> m) {
-    try {
-      FlutterOverlayWindow.shareData(jsonEncode(m));
-    } catch (_) {}
+    _link.send(m);
   }
 
   // ---------------------------------------------------------------------------
@@ -127,6 +137,7 @@ class _OverlayHomeState extends State<_OverlayHome>
         child: _BeatsCircle(
           anim: _beats,
           active: _phase == 'listening' || _phase == 'finishing',
+          linked: _linked,
           size: d,
           onTap: () => _send({'a': 'tap'}),
         ),
@@ -180,14 +191,15 @@ class _OverlayHomeState extends State<_OverlayHome>
         title = 'Saved!';
         sub = 'Back to the reel';
       default:
-        title = '';
-        sub = '';
+        title = 'Song Sakhi';
+        sub = 'Something needs attention';
     }
     return Row(
       children: [
         _BeatsCircle(
           anim: _beats,
           active: _phase == 'listening' || _phase == 'finishing',
+          linked: _linked,
           size: 44,
           onTap: () => _send({'a': 'tap'}),
         ),
@@ -251,7 +263,13 @@ class _OverlayHomeState extends State<_OverlayHome>
           ),
         );
       default:
-        return const SizedBox.shrink();
+        return Center(
+          child: Text(
+            _message ?? '',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _amber, fontSize: 12),
+          ),
+        );
     }
   }
 
@@ -509,12 +527,14 @@ class _SongRow extends StatelessWidget {
 class _BeatsCircle extends StatelessWidget {
   final Animation<double> anim;
   final bool active;
+  final bool linked;
   final double size;
   final VoidCallback onTap;
 
   const _BeatsCircle({
     required this.anim,
     required this.active,
+    this.linked = true,
     required this.size,
     required this.onTap,
   });
@@ -529,7 +549,7 @@ class _BeatsCircle extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: const Color(0xFF161616),
-          border: Border.all(color: _green, width: 2),
+          border: Border.all(color: linked ? _green : _amber, width: 2),
           boxShadow: [
             BoxShadow(
               color: _green.withValues(alpha: active ? 0.55 : 0.25),

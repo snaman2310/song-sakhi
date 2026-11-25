@@ -11,6 +11,7 @@ import '../gemini_service.dart';
 import '../local_store.dart';
 import '../playlist_service.dart';
 import 'mobile_live_listener.dart';
+import 'nudge_link.dart';
 import 'screen_reader.dart';
 
 enum NudgePhase { idle, listening, finishing, selecting, picking, saving, done }
@@ -67,7 +68,7 @@ class NudgeController {
   final GeminiService _gemini = GeminiService();
   final ScreenReader _reader = ScreenReader();
 
-  StreamSubscription<dynamic>? _overlaySub;
+  NudgeServer? _server;
   StreamSubscription<void>? _captureStopSub;
   LiveListener? _listener;
   Timer? _ocrTimer;
@@ -150,6 +151,13 @@ class NudgeController {
       return 'Could not start the background listener. Check notification and microphone permissions.';
     }
 
+    final server = NudgeServer(onMessage: _onOverlayMessage);
+    if (!await server.start()) {
+      await ScreenCapture.stop();
+      return 'Could not open the nudge link (port busy). Fully close the app and try again.';
+    }
+    _server = server;
+
     try {
       await FlutterOverlayWindow.showOverlay(
         height: (_circleDp * dpr).round(),
@@ -160,6 +168,8 @@ class NudgeController {
         overlayContent: 'Tap the circle over a reel to find its songs',
       );
     } catch (e) {
+      await server.stop();
+      _server = null;
       await ScreenCapture.stop();
       return 'Could not show the floating nudge: $e';
     }
@@ -167,7 +177,6 @@ class NudgeController {
     _wantW = _circleDp;
     _wantH = _circleDp;
     _calib = 0;
-    _overlaySub = FlutterOverlayWindow.overlayListener.listen(_onOverlayMessage);
     _captureStopSub = ScreenCapture.stopped.listen((_) {
       // Sharing was ended from outside (status bar chip / system).
       _screenOn = false;
@@ -187,8 +196,8 @@ class NudgeController {
   Future<void> disable() async {
     await _teardownSession();
     _doneTimer?.cancel();
-    await _overlaySub?.cancel();
-    _overlaySub = null;
+    await _server?.stop();
+    _server = null;
     await _captureStopSub?.cancel();
     _captureStopSub = null;
     try {
@@ -661,10 +670,12 @@ class NudgeController {
     final n = _songs.length;
     final p = _playlistList.length;
     return switch (_phase) {
-      NudgePhase.idle => (w: _circleDp, h: _circleDp, compact: true),
-      NudgePhase.listening || NudgePhase.finishing => n == 0
+      NudgePhase.idle => _message == null
           ? (w: _circleDp, h: _circleDp, compact: true)
-          : (w: _overlayWidth, h: (120 + n * 58).clamp(180, 440).toInt(), compact: false),
+          : (w: _overlayWidth, h: 150, compact: false),
+      NudgePhase.listening || NudgePhase.finishing => (n == 0 && _message == null)
+          ? (w: _circleDp, h: _circleDp, compact: true)
+          : (w: _overlayWidth, h: (130 + n * 58).clamp(190, 440).toInt(), compact: false),
       NudgePhase.selecting => (
           w: _overlayWidth,
           h: n == 0 ? 170 : (190 + n * 58).clamp(250, 520).toInt(),
@@ -705,7 +716,7 @@ class NudgeController {
       };
 
   void _push() {
-    if (!enabled.value && _overlaySub == null) return;
+    if (!enabled.value) return;
     _syncOverlay();
   }
 
@@ -718,7 +729,7 @@ class NudgeController {
         _calib = 0;
         await _resize();
       }
-      await FlutterOverlayWindow.shareData(jsonEncode(_stateJson(l.compact)));
+      _server?.send(jsonEncode(_stateJson(l.compact)));
     } catch (e) {
       debugPrint('Overlay sync failed: $e');
     }

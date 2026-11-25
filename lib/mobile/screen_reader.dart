@@ -35,7 +35,10 @@ class ScreenCapture {
   static Future<bool> start() async {
     _installHandler();
     try {
-      return (await _channel.invokeMethod<bool>('start')) ?? false;
+      return (await _channel
+                  .invokeMethod<bool>('start')
+                  .timeout(const Duration(seconds: 30), onTimeout: () => false)) ??
+          false;
     } on PlatformException catch (e) {
       debugPrint('ScreenCapture.start failed: ${e.code} ${e.message}');
       return false;
