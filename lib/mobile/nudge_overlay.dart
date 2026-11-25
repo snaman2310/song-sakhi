@@ -177,7 +177,7 @@ class _OverlayHomeState extends State<_OverlayHome>
         sub = _s['screenOn'] == true ? 'Hearing + reading screen · tap to stop' : 'Tap the circle to stop';
       case 'finishing':
         title = 'Finishing up…';
-        sub = 'Checking the last bit';
+        sub = 'Tap the circle to show results now';
       case 'selecting':
         title = n == 0 ? 'Nothing found' : '$n song${n == 1 ? '' : 's'} found';
         sub = n == 0 ? 'Tap the circle to try again' : 'Tap songs to choose';

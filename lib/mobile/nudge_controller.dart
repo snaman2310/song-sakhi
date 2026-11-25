@@ -73,6 +73,8 @@ class NudgeController {
   LiveListener? _listener;
   Timer? _ocrTimer;
   Timer? _doneTimer;
+  Timer? _finishTimer;
+  bool _starting = false;
 
   int _session = 0;
   NudgePhase _phase = NudgePhase.idle;
@@ -267,6 +269,7 @@ class NudgeController {
       case NudgePhase.done:
         _startSession();
       case NudgePhase.finishing:
+        _forceFinish(); // don't make the user wait for slow network results
       case NudgePhase.picking:
       case NudgePhase.saving:
         break;
@@ -296,6 +299,22 @@ class NudgeController {
   // ------------------------------------------------------------------------
 
   Future<void> _startSession() async {
+    if (_starting) return;
+    _starting = true;
+    try {
+      await _startSessionInner();
+    } catch (e) {
+      debugPrint('Start failed: $e');
+      await _teardownSession();
+      _resetToIdle();
+      _message = 'Could not start listening: ${e.toString().replaceAll('Exception: ', '')}';
+      _push();
+    } finally {
+      _starting = false;
+    }
+  }
+
+  Future<void> _startSessionInner() async {
     await _teardownSession();
     _doneTimer?.cancel();
     final id = ++_session;
@@ -393,28 +412,63 @@ class NudgeController {
     _phase = NudgePhase.finishing;
     _push();
 
+    // Never stay in "finishing" for long: slow network results still arrive
+    // later and are added to the list, but the user gets the list quickly.
+    _finishTimer?.cancel();
+    _finishTimer = Timer(const Duration(seconds: 10), _forceFinish);
+
     _ocrTimer?.cancel();
     _ocrTimer = null;
-    await _listener?.stop();
+
+    // A very quick second tap can arrive while the microphone is still starting.
+    var waited = 0;
+    while (_starting && waited < 5000) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      waited += 50;
+    }
+    if (id != _session) return;
+
+    try {
+      await _listener?.stop().timeout(const Duration(seconds: 3));
+    } catch (_) {}
 
     if (_screenOn) {
-      var waited = 0;
-      while (_ocrBusy && waited < 8000) {
+      waited = 0;
+      while (_ocrBusy && waited < 3000) {
         await Future<void>.delayed(const Duration(milliseconds: 100));
         waited += 100;
       }
-      await _ocrTick(last: true);
+      try {
+        await _ocrTick(last: true).timeout(const Duration(seconds: 6));
+      } catch (_) {}
     }
     if (id != _session) return;
     _ocrDone = true;
-    // Screen sharing only lives for the length of one reel.
-    if (_screenAsked) await ScreenCapture.stopProjection();
-    _screenOn = false;
+    await _endScreen();
     _maybeFinish();
+  }
+
+  /// Screen sharing only lives for the length of one reel.
+  Future<void> _endScreen() async {
+    if (!_screenAsked) return;
+    _screenAsked = false;
+    _screenOn = false;
+    try {
+      await ScreenCapture.stopProjection().timeout(const Duration(seconds: 3));
+    } catch (_) {}
+  }
+
+  void _forceFinish() {
+    if (_phase != NudgePhase.finishing) return;
+    _ocrTimer?.cancel();
+    _ocrTimer = null;
+    unawaited(_endScreen());
+    _maybeFinish(force: true);
   }
 
   Future<void> _teardownSession() async {
     _session++; // invalidates every callback of the old session
+    _finishTimer?.cancel();
     _ocrTimer?.cancel();
     _ocrTimer = null;
     if (_screenAsked) {
@@ -432,8 +486,10 @@ class NudgeController {
     }
   }
 
-  void _maybeFinish() {
-    if (_phase != NudgePhase.finishing || !_audioDone || !_ocrDone) return;
+  void _maybeFinish({bool force = false}) {
+    if (_phase != NudgePhase.finishing) return;
+    if (!force && !(_audioDone && _ocrDone)) return;
+    _finishTimer?.cancel();
     // Trusted songs (on screen / both models) first.
     final trusted = _songs.where((s) => s.trusted).toList();
     final rest = _songs.where((s) => !s.trusted).toList();
@@ -528,7 +584,7 @@ class NudgeController {
         bothModels: bothModels,
       );
       // Without screen reading every song is a guess, so keep them all ticked.
-      song.selected = song.trusted || !_screenOn;
+      song.selected = song.trusted || !_usedScreen;
       _songs.add(song);
       return;
     }
